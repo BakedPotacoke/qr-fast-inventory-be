@@ -20,6 +20,12 @@ export const createItem = async (req, res) => {
             return res.status(400).json({ message: 'Nama barang, QR/SKU, dan kategori wajib diisi.' });
         }
 
+        // 1. Cek apakah SKU/QR Code sudah ada di database
+        const existingItem = await Item.findByQrCode(qr_code);
+        if (existingItem) {
+            return res.status(400).json({ message: 'SKU sudah digunakan' });
+        }
+
         // Jika ada file gambar yang diupload via multer
         const gambar_url = req.file
             ? `/uploads/${req.file.filename}`
@@ -33,6 +39,12 @@ export const createItem = async (req, res) => {
         });
     } catch (error) {
         console.error('createItem error:', error);
+
+        // 2. Tangani error duplikasi dari database (MySQL error code 1062)
+        if (error.code === 'ER_DUP_ENTRY' || error.errno === 1062) {
+            return res.status(400).json({ message: 'SKU sudah digunakan' });
+        }
+
         res.status(500).json({ message: 'Terjadi kesalahan pada server.' });
     }
 };
@@ -61,12 +73,21 @@ export const updateItem = async (req, res) => {
     try {
         const itemId = req.params.id;
         const { nama_barang, qr_code, kategori, remove_gambar } = req.body;
-        
+
         let updateData = {};
         if (nama_barang) updateData.nama_barang = nama_barang;
-        if (qr_code) updateData.qr_code = qr_code;
         if (kategori) updateData.kategori = kategori;
-        
+
+        // 1. Cek duplikasi jika qr_code (SKU) ikut diupdate
+        if (qr_code) {
+            const existingItem = await Item.findByQrCode(qr_code);
+            // Pastikan SKU yang ditemukan bukan milik barang itu sendiri yang sedang diupdate
+            if (existingItem && Number(existingItem.id) !== Number(itemId)) {
+                return res.status(400).json({ message: 'SKU sudah digunakan' });
+            }
+            updateData.qr_code = qr_code;
+        }
+
         // Handle file upload
         if (req.file) {
             updateData.gambar_url = `/uploads/${req.file.filename}`;
@@ -79,12 +100,18 @@ export const updateItem = async (req, res) => {
             return res.status(404).json({ message: 'Barang tidak ditemukan atau tidak ada perubahan.' });
         }
 
-        res.status(200).json({ 
+        res.status(200).json({
             message: 'Barang berhasil diupdate.',
             data: updateData
         });
     } catch (error) {
         console.error('updateItem error:', error);
+
+        // 2. Tangani error duplikasi dari database (MySQL error code 1062)
+        if (error.code === 'ER_DUP_ENTRY' || error.errno === 1062) {
+            return res.status(400).json({ message: 'SKU sudah digunakan' });
+        }
+
         res.status(500).json({ message: 'Terjadi kesalahan saat mengupdate barang.' });
     }
 };

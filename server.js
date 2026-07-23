@@ -3,6 +3,7 @@ import cors from 'cors';
 import 'dotenv/config';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import multer from 'multer';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -15,7 +16,7 @@ app.use(cors());
 app.use(express.json());
 
 // Sajikan folder uploads sebagai static files
-const uploadDir = process.env.UPLOAD_DIR || path.join(__dirname, '../uploads');
+const uploadDir = process.env.UPLOAD_DIR || path.join(__dirname, 'uploads');
 app.use('/uploads', express.static(uploadDir));
 
 // Import Routes (Perhatikan perubahan nama file di sini)
@@ -37,6 +38,15 @@ app.use('/api/transactions', transactionRouter);
 // Rute Uji Coba Dasar
 app.get('/', (req, res) => {
   res.json({ message: "Server Backend FastQR Aktif!" });
+});
+
+// Global Error Handler
+app.use((err, req, res, next) => {
+  console.error('Unhandled Error:', err);
+  if (err instanceof multer.MulterError) {
+    return res.status(400).json({ message: err.message });
+  }
+  res.status(500).json({ message: err.message || 'Terjadi kesalahan pada server.' });
 });
 
 app.listen(PORT, () => {
