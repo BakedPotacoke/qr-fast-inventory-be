@@ -15,6 +15,10 @@ const Transaction = {
         );
         return rows[0];
     },
+    findById: async (id, conn = db) => {
+        const [rows] = await conn.query('SELECT * FROM transactions WHERE id = ?', [id]);
+        return rows[0];
+    },
     complete: async (id, conn = db) => {
         const [result] = await conn.query(
             'UPDATE transactions SET waktu_kembali = CURRENT_TIMESTAMP, status_transaksi = "selesai" WHERE id = ?',
@@ -30,7 +34,9 @@ const Transaction = {
                 i.qr_code as kode, 
                 i.kategori, 
                 i.status, 
-                i.gambar_url as gambar 
+                i.gambar_url as gambar,
+                t.id as transaction_id,
+                t.waktu_pinjam
             FROM items i
             JOIN transactions t ON i.id = t.item_id
             WHERE t.user_id = ? AND t.status_transaksi = 'dipinjam'

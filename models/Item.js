@@ -5,11 +5,18 @@ const Item = {
         const [rows] = await conn.query('SELECT * FROM items WHERE qr_code = ? FOR UPDATE', [qr_code]);
         return rows[0];
     },
+    findById: async (id, conn = db) => {
+        const [rows] = await conn.query('SELECT * FROM items WHERE id = ?', [id]);
+        return rows[0];
+    },
     updateStatus: async (id, status, conn = db) => {
         const [result] = await conn.query('UPDATE items SET status = ? WHERE id = ?', [status, id]);
         return result.affectedRows;
     },
-    findAll: async (conn = db) => {
+    findAll: async ({ status } = {}, conn = db) => {
+        const validStatuses = ['tersedia', 'dipinjam', 'rusak', 'hilang'];
+        const useFilter = status && validStatuses.includes(status);
+
         const query = `
             SELECT 
                 i.*, 
@@ -18,24 +25,31 @@ const Item = {
             FROM items i
             LEFT JOIN transactions t ON i.id = t.item_id AND t.status_transaksi = 'dipinjam'
             LEFT JOIN users u ON t.user_id = u.id
+            ${useFilter ? 'WHERE i.status = ?' : ''}
             ORDER BY i.id DESC
         `;
-        const [rows] = await conn.query(query);
+        const params = useFilter ? [status] : [];
+        const [rows] = await conn.query(query, params);
         return rows;
     },
-    create: async ({ nama_barang, qr_code, kategori, gambar_url }) => {
+    // Tambah cloudinary_public_id ke INSERT
+    create: async ({ nama_barang, qr_code, kategori, gambar_url, cloudinary_public_id }) => {
         const [result] = await db.query(
-            'INSERT INTO items (nama_barang, qr_code, kategori, gambar_url, status) VALUES (?, ?, ?, ?, ?)',
-            [nama_barang, qr_code, kategori, gambar_url || null, 'tersedia']
+            'INSERT INTO items (nama_barang, qr_code, kategori, gambar_url, cloudinary_public_id, status) VALUES (?, ?, ?, ?, ?, ?)',
+            [nama_barang, qr_code, kategori, gambar_url || null, cloudinary_public_id || null, 'tersedia']
         );
         return result.insertId;
     },
     getInventorySummary: async (conn = db) => {
         const [totalRows] = await conn.query('SELECT COUNT(*) as totalBarang FROM items');
         const [dipinjamRows] = await conn.query('SELECT COUNT(*) as sedangDipinjam FROM items WHERE status = "dipinjam"');
+        const [rusakRows] = await conn.query('SELECT COUNT(*) as jumlahRusak FROM items WHERE status = "rusak"');
+        const [hilangRows] = await conn.query('SELECT COUNT(*) as jumlahHilang FROM items WHERE status = "hilang"');
         return {
             totalBarang: totalRows[0].totalBarang,
-            sedangDipinjam: dipinjamRows[0].sedangDipinjam
+            sedangDipinjam: dipinjamRows[0].sedangDipinjam,
+            jumlahRusak: rusakRows[0].jumlahRusak,
+            jumlahHilang: hilangRows[0].jumlahHilang
         };
     },
     deleteBulk: async (ids, conn = db) => {
@@ -45,6 +59,7 @@ const Item = {
         const [result] = await conn.query(`DELETE FROM items WHERE id IN (${placeholders}) AND status != 'dipinjam'`, ids);
         return result.affectedRows;
     },
+    // Dynamic update — cloudinary_public_id akan ter-update otomatis jika ada di updateData
     update: async (id, itemData, conn = db) => {
         const fields = [];
         const values = [];
@@ -62,7 +77,17 @@ const Item = {
         const query = `UPDATE items SET ${fields.join(', ')} WHERE id = ?`;
         const [result] = await conn.query(query, values);
         return result.affectedRows;
-    }
+    },
+    // Ambil cloudinary_public_id dari multiple items (dipakai saat bulk delete)
+    findPublicIdsByIds: async (ids, conn = db) => {
+        if (!ids || ids.length === 0) return [];
+        const placeholders = ids.map(() => '?').join(',');
+        const [rows] = await conn.query(
+            `SELECT id, cloudinary_public_id FROM items WHERE id IN (${placeholders}) AND cloudinary_public_id IS NOT NULL`,
+            ids
+        );
+        return rows;
+    },
 };
 
 export default Item;

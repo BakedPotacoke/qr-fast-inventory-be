@@ -2,6 +2,7 @@ import db from '../config/db.js';
 import User from '../models/User.js';
 import Item from '../models/Item.js';
 import Transaction from '../models/Transaction.js';
+import ItemReport from '../models/ItemReport.js';
 
 // Helper: format durasi (ms) jadi teks yang mudah dibaca
 function formatDurasi(ms) {
@@ -87,20 +88,18 @@ export const handleScan = async (req, res) => {
                     });
                 }
 
-                await Transaction.complete(tx.id, conn);
-                await Item.updateStatus(barang.id, "tersedia", conn);
-
                 const durasiMs = Date.now() - new Date(tx.waktu_pinjam).getTime();
                 const durasiText = formatDurasi(durasiMs);
-                const catatanTerlambat = durasiMs > 24 * 60 * 60 * 1000
-                    ? ' (durasi peminjaman cukup lama, mohon dicek kondisi barang)'
-                    : '';
 
-                await conn.commit();
+                // Belum menyentuh data apapun — hanya validasi bahwa scan ini sah untuk
+                // proses pengembalian. Transaksi & status barang baru difinalisasi setelah
+                // user mengonfirmasi kondisi barang lewat endpoint /api/scan/confirm-return.
+                await conn.rollback();
                 return res.status(200).json({
-                    status: "kembali",
-                    message: `${namaUser} berhasil mengembalikan "${barang.nama_barang}" setelah dipinjam selama ${durasiText}${catatanTerlambat}.`,
+                    status: "konfirmasi_kembali",
+                    message: `Sebelum menyelesaikan, bagaimana kondisi "${barang.nama_barang}" saat ini?`,
                     barang,
+                    transaction_id: tx.id,
                     durasi_pinjam: durasiText
                 });
             }
@@ -135,6 +134,88 @@ export const handleScan = async (req, res) => {
         console.error('Scan QR error:', error);
         return res.status(500).json({
             message: "Terjadi kesalahan pada server saat memproses scan.",
+            error: error.message
+        });
+    } finally {
+        conn.release();
+    }
+};
+
+// POST /api/scan/confirm-return
+// Dipanggil setelah user memilih kondisi barang (baik/rusak) pada modal konfirmasi
+// yang muncul sesudah handleScan mengembalikan status "konfirmasi_kembali".
+export const confirmReturn = async (req, res) => {
+    const { transaction_id, kondisi, keterangan } = req.body;
+    const user_id = req.user.id;
+
+    if (!transaction_id) {
+        return res.status(400).json({ message: "transaction_id wajib disertakan." });
+    }
+    if (!['baik', 'rusak'].includes(kondisi)) {
+        return res.status(400).json({ message: "Kondisi wajib diisi: 'baik' atau 'rusak'." });
+    }
+    if (kondisi === 'rusak' && (!keterangan || !keterangan.trim())) {
+        return res.status(400).json({ message: "Keterangan kerusakan wajib diisi." });
+    }
+
+    const conn = await db.getConnection();
+
+    try {
+        await conn.beginTransaction();
+
+        const user = await User.findById(user_id, conn);
+        if (!user) {
+            await conn.rollback();
+            return res.status(404).json({ message: "Pengguna dengan ID tersebut tidak terdaftar di sistem." });
+        }
+
+        const tx = await Transaction.findById(transaction_id, conn);
+        if (!tx || tx.status_transaksi !== 'dipinjam') {
+            await conn.rollback();
+            return res.status(409).json({ message: "Transaksi tidak ditemukan atau pengembalian sudah diselesaikan sebelumnya." });
+        }
+
+        const isAdmin = user.role === 'admin';
+        if (tx.user_id !== user_id && !isAdmin) {
+            await conn.rollback();
+            return res.status(403).json({ message: "Anda tidak berhak menyelesaikan pengembalian ini." });
+        }
+
+        const barang = await Item.findById(tx.item_id, conn);
+        if (!barang) {
+            await conn.rollback();
+            return res.status(404).json({ message: "Barang terkait transaksi ini tidak ditemukan." });
+        }
+
+        await Transaction.complete(tx.id, conn);
+
+        if (kondisi === 'rusak') {
+            await Item.updateStatus(barang.id, 'rusak', conn);
+            await ItemReport.create({
+                item_id: barang.id,
+                user_id,
+                transaction_id: tx.id,
+                jenis_laporan: 'rusak',
+                keterangan: keterangan.trim()
+            }, conn);
+        } else {
+            await Item.updateStatus(barang.id, 'tersedia', conn);
+        }
+
+        await conn.commit();
+
+        return res.status(200).json({
+            status: kondisi === 'rusak' ? 'kembali_rusak' : 'kembali',
+            message: kondisi === 'rusak'
+                ? `"${barang.nama_barang}" telah dikembalikan dan ditandai rusak. Laporan sudah dikirim ke admin.`
+                : `"${barang.nama_barang}" berhasil dikembalikan dalam kondisi baik.`,
+            barang
+        });
+    } catch (error) {
+        await conn.rollback();
+        console.error('confirmReturn error:', error);
+        return res.status(500).json({
+            message: "Terjadi kesalahan pada server saat mengonfirmasi pengembalian.",
             error: error.message
         });
     } finally {

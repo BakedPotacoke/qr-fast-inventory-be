@@ -5,16 +5,19 @@
   "main": "server.js",
   "type": "module",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node --watch server.js"
+    "start": "node --import dotenv/config server.js",
+    "dev": "node --watch --import dotenv/config server.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
+    "cloudinary": "^2.10.0",
     "cors": "^2.8.5",
     "dotenv": "^17.4.2",
     "express": "^4.21.0",
     "jsonwebtoken": "^9.0.3",
     "multer": "^2.2.0",
-    "mysql2": "^3.22.6"
+    "mysql2": "^3.22.6",
+    "sharp": "^0.35.3",
+    "uuid": "^14.0.1"
   }
 }

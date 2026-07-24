@@ -17,11 +17,13 @@ export const getDashboardSummary = async (req, res) => {
         // 2. Dapatkan ringkasan inventaris (lewat Model)
         const inventarisSummary = await Item.getInventorySummary();
 
-        // 3. (Opsional) Data stat cards jika dibutuhkan
+        // 3. Data stat cards
         const statCards = {
             sedangDipinjam: inventarisSummary.sedangDipinjam,
             transaksiAktif: inventarisSummary.sedangDipinjam, // simplifikasi
-            tersedia: inventarisSummary.totalBarang - inventarisSummary.sedangDipinjam
+            tersedia: inventarisSummary.totalBarang - inventarisSummary.sedangDipinjam - inventarisSummary.jumlahRusak - inventarisSummary.jumlahHilang,
+            jumlahRusak: inventarisSummary.jumlahRusak,
+            jumlahHilang: inventarisSummary.jumlahHilang
         };
 
         res.status(200).json({
