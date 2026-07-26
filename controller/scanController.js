@@ -59,7 +59,7 @@ export const handleScan = async (req, res) => {
                 await conn.commit();
                 return res.status(200).json({
                     status: "pinjam",
-                    message: `${namaUser} berhasil meminjam "${barang.nama_barang}". Jangan lupa dikembalikan ya!`,
+                    message: `Berhasil meminjam "${barang.nama_barang}". Jangan lupa dikembalikan ya!`,
                     barang,
                     transaction_id: transactionId
                 });

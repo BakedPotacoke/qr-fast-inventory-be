@@ -64,7 +64,7 @@ export const processAndUploadImage = async (req, res, next) => {
         // Lampirkan hasil ke request agar bisa dipakai controller
         req.cloudinaryResult = {
             secure_url: cloudinaryResult.secure_url,
-            public_id:  cloudinaryResult.public_id,
+            public_id: cloudinaryResult.public_id,
         };
 
         next();

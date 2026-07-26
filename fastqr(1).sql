@@ -34,11 +34,12 @@ CREATE TABLE IF NOT EXISTS `items` (
   `nama_barang` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
   `kategori` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `gambar_url` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `cloudinary_public_id` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `status` enum('tersedia','dipinjam','rusak','hilang') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT 'tersedia',
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   UNIQUE KEY `qr_code` (`qr_code`)
-) ENGINE=MyISAM AUTO_INCREMENT=28 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=28 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 --
 -- Dumping data for table `items`
