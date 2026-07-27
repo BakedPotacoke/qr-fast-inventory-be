@@ -2,10 +2,10 @@ import db from '../config/db.js';
 
 const ItemReport = {
     // Buat entri laporan baru (rusak / hilang)
-    create: async ({ item_id, user_id, transaction_id = null, jenis_laporan, keterangan = null }, conn = db) => {
+    create: async ({ item_id, user_id, transaction_id = null, jenis_laporan, keterangan = null, foto_url = null, cloudinary_public_id = null }, conn = db) => {
         const [result] = await conn.query(
-            'INSERT INTO item_reports (item_id, user_id, transaction_id, jenis_laporan, keterangan) VALUES (?, ?, ?, ?, ?)',
-            [item_id, user_id, transaction_id, jenis_laporan, keterangan]
+            'INSERT INTO item_reports (item_id, user_id, transaction_id, jenis_laporan, keterangan, foto_url, cloudinary_public_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            [item_id, user_id, transaction_id, jenis_laporan, keterangan, foto_url, cloudinary_public_id]
         );
         return result.insertId;
     },

@@ -42,7 +42,10 @@ export const processAndUploadImage = async (req, res, next) => {
             .toBuffer();
 
         // ── UUID sebagai nama file unik ──
-        const publicId = `qrfast/items/${uuidv4()}`;
+        // Pisahkan folder Cloudinary: foto laporan/pengembalian vs foto barang inventaris
+        const isReportUpload = req.originalUrl?.includes('confirm-return');
+        const folderPath = isReportUpload ? 'qrfast/reports' : 'qrfast/items';
+        const publicId = `${folderPath}/${uuidv4()}`;
 
         // ── Upload ke Cloudinary via stream ──
         const cloudinaryResult = await new Promise((resolve, reject) => {

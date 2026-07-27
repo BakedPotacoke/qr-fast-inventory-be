@@ -44,6 +44,27 @@ const Transaction = {
         `, [userId]);
         return rows;
     },
+    findByUserId: async (userId, conn = db) => {
+        const query = `
+            SELECT 
+                t.id,
+                t.status_transaksi as status,
+                t.waktu_pinjam,
+                t.waktu_kembali,
+                t.user_id,
+                i.nama_barang,
+                i.qr_code as sku,
+                i.kategori,
+                u.nama_lengkap as peminjam
+            FROM transactions t
+            JOIN items i ON t.item_id = i.id
+            JOIN users u ON t.user_id = u.id
+            WHERE t.user_id = ?
+            ORDER BY t.waktu_pinjam DESC
+        `;
+        const [rows] = await conn.query(query, [userId]);
+        return rows;
+    },
     findAll: async (conn = db) => {
         const query = `
             SELECT 

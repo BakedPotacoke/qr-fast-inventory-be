@@ -59,7 +59,7 @@ export const handleScan = async (req, res) => {
                 await conn.commit();
                 return res.status(200).json({
                     status: "pinjam",
-                    message: `Berhasil meminjam "${barang.nama_barang}". Jangan lupa dikembalikan ya!`,
+                    message: `Berhasil meminjam ${barang.nama_barang}. Jangan lupa dikembalikan ya!`,
                     barang,
                     transaction_id: transactionId
                 });
@@ -142,8 +142,10 @@ export const handleScan = async (req, res) => {
 };
 
 // POST /api/scan/confirm-return
-// Dipanggil setelah user memilih kondisi barang (baik/rusak) pada modal konfirmasi
-// yang muncul sesudah handleScan mengembalikan status "konfirmasi_kembali".
+// Dipanggil setelah user mengisi form kondisi barang (baik/rusak) beserta foto bukti.
+// Request harus berupa multipart/form-data dengan field:
+//   - transaction_id, kondisi, keterangan (text fields)
+//   - foto (file — sudah diproses oleh uploadMiddleware → req.cloudinaryResult)
 export const confirmReturn = async (req, res) => {
     const { transaction_id, kondisi, keterangan } = req.body;
     const user_id = req.user.id;
@@ -156,6 +158,9 @@ export const confirmReturn = async (req, res) => {
     }
     if (kondisi === 'rusak' && (!keterangan || !keterangan.trim())) {
         return res.status(400).json({ message: "Keterangan kerusakan wajib diisi." });
+    }
+    if (!req.cloudinaryResult) {
+        return res.status(400).json({ message: "Foto bukti kondisi barang wajib disertakan." });
     }
 
     const conn = await db.getConnection();
@@ -191,16 +196,21 @@ export const confirmReturn = async (req, res) => {
 
         if (kondisi === 'rusak') {
             await Item.updateStatus(barang.id, 'rusak', conn);
-            await ItemReport.create({
-                item_id: barang.id,
-                user_id,
-                transaction_id: tx.id,
-                jenis_laporan: 'rusak',
-                keterangan: keterangan.trim()
-            }, conn);
         } else {
             await Item.updateStatus(barang.id, 'tersedia', conn);
         }
+
+        // Selalu simpan laporan + foto bukti, baik kondisi baik maupun rusak
+        // Catatan: jenis_laporan 'baik' memerlukan ENUM yang sudah diperbarui di DB
+        await ItemReport.create({
+            item_id: barang.id,
+            user_id,
+            transaction_id: tx.id,
+            jenis_laporan: kondisi === 'rusak' ? 'rusak' : 'baik',
+            keterangan: kondisi === 'rusak' ? keterangan.trim() : null,
+            foto_url: req.cloudinaryResult.secure_url,
+            cloudinary_public_id: req.cloudinaryResult.public_id,
+        }, conn);
 
         await conn.commit();
 
