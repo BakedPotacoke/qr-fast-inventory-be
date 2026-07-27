@@ -10,7 +10,6 @@ const deleteFromCloudinary = async (publicId) => {
     try {
         await cloudinary.uploader.destroy(publicId);
     } catch (err) {
-        // Log error tapi jangan crash server — gambar lama tetap terhapus dari DB
         console.error(`Gagal menghapus gambar dari Cloudinary (public_id: ${publicId}):`, err.message);
     }
 };
@@ -27,7 +26,7 @@ export const getAllItems = async (req, res) => {
     }
 };
 
-// POST /api/items — hanya admin (diproteksi verifyToken + isAdmin di route)
+// POST /api/items — hanya admin
 export const createItem = async (req, res) => {
     try {
         const { nama_barang, qr_code, kategori } = req.body;
@@ -36,13 +35,11 @@ export const createItem = async (req, res) => {
             return res.status(400).json({ message: 'Nama barang, QR/SKU, dan kategori wajib diisi.' });
         }
 
-        // 1. Cek apakah SKU/QR Code sudah ada di database
         const existingItem = await Item.findByQrCode(qr_code);
         if (existingItem) {
             return res.status(400).json({ message: 'SKU sudah digunakan' });
         }
 
-        // 2. Ambil hasil upload Cloudinary dari middleware (jika ada gambar)
         const gambar_url           = req.cloudinaryResult?.secure_url || null;
         const cloudinary_public_id = req.cloudinaryResult?.public_id  || null;
 
@@ -54,17 +51,14 @@ export const createItem = async (req, res) => {
         });
     } catch (error) {
         console.error('createItem error:', error);
-
-        // Tangani error duplikasi dari database (MySQL error code 1062)
         if (error.code === 'ER_DUP_ENTRY' || error.errno === 1062) {
             return res.status(400).json({ message: 'SKU sudah digunakan' });
         }
-
         res.status(500).json({ message: 'Terjadi kesalahan pada server.' });
     }
 };
 
-// DELETE /api/items — hanya admin
+// DELETE /api/items — hanya admin (Hapus Massal & Satuan)
 export const deleteItems = async (req, res) => {
     try {
         const { ids } = req.body;
@@ -72,13 +66,28 @@ export const deleteItems = async (req, res) => {
             return res.status(400).json({ message: 'ID barang wajib disertakan dalam bentuk array.' });
         }
 
+        // ─── VALIDASI: Tolak penghapusan jika ada barang berstatus 'dipinjam' ───
+        const placeholders = ids.map(() => '?').join(',');
+        const [borrowedItems] = await db.query(
+            `SELECT nama_barang FROM items WHERE id IN (${placeholders}) AND status = 'dipinjam'`,
+            ids
+        );
+
+        if (borrowedItems.length > 0) {
+            const names = borrowedItems.map(item => item.nama_barang).join(', ');
+            return res.status(400).json({ 
+                message: `Gagal menghapus! Terdapat barang yang sedang dipinjam: ${names}.` 
+            });
+        }
+        // ────────────────────────────────────────────────────────────────────────
+
         // 1. Ambil semua cloudinary_public_id sebelum dihapus dari DB
         const itemsWithImages = await Item.findPublicIdsByIds(ids);
 
         // 2. Hapus dari DB
         const affectedRows = await Item.deleteBulk(ids);
 
-        // 3. Hapus gambar dari Cloudinary secara paralel (fire-and-forget style dengan logging)
+        // 3. Hapus gambar dari Cloudinary secara paralel
         if (itemsWithImages.length > 0) {
             const deletePromises = itemsWithImages.map(item => deleteFromCloudinary(item.cloudinary_public_id));
             await Promise.allSettled(deletePromises);
@@ -94,7 +103,7 @@ export const deleteItems = async (req, res) => {
     }
 };
 
-// PUT /api/items/:id — admin bisa update semua field; pegawai hanya bisa update status
+// PUT /api/items/:id — admin bisa update semua field; pegawai hanya status
 export const updateItem = async (req, res) => {
     try {
         const itemId = req.params.id;
@@ -102,15 +111,12 @@ export const updateItem = async (req, res) => {
         const VALID_STATUSES = ['tersedia', 'dipinjam', 'rusak', 'hilang'];
 
         const { nama_barang, qr_code, kategori, remove_gambar, status } = req.body;
-
         let updateData = {};
 
         if (userRole === 'admin') {
-            // Admin bisa update semua field
             if (nama_barang) updateData.nama_barang = nama_barang;
             if (kategori) updateData.kategori = kategori;
 
-            // 1. Cek duplikasi jika qr_code (SKU) ikut diupdate
             if (qr_code) {
                 const existingItem = await Item.findByQrCode(qr_code);
                 if (existingItem && Number(existingItem.id) !== Number(itemId)) {
@@ -119,9 +125,7 @@ export const updateItem = async (req, res) => {
                 updateData.qr_code = qr_code;
             }
 
-            // 2. Handle perubahan gambar
             if (req.cloudinaryResult) {
-                // Ada gambar baru: hapus gambar lama dari Cloudinary, lalu simpan yang baru
                 const existingItem = await Item.findById(itemId);
                 if (existingItem?.cloudinary_public_id) {
                     await deleteFromCloudinary(existingItem.cloudinary_public_id);
@@ -130,7 +134,6 @@ export const updateItem = async (req, res) => {
                 updateData.cloudinary_public_id = req.cloudinaryResult.public_id;
 
             } else if (remove_gambar === 'true') {
-                // User meminta hapus gambar: hapus dari Cloudinary + set null di DB
                 const existingItem = await Item.findById(itemId);
                 if (existingItem?.cloudinary_public_id) {
                     await deleteFromCloudinary(existingItem.cloudinary_public_id);
@@ -139,7 +142,6 @@ export const updateItem = async (req, res) => {
                 updateData.cloudinary_public_id = null;
             }
 
-            // Admin bisa update status ke nilai apapun yang valid
             if (status !== undefined) {
                 if (!VALID_STATUSES.includes(status)) {
                     return res.status(400).json({
@@ -150,7 +152,6 @@ export const updateItem = async (req, res) => {
             }
 
         } else {
-            // Pegawai hanya boleh update status
             if (status === undefined) {
                 return res.status(403).json({
                     message: 'Anda tidak memiliki izin untuk mengubah data barang selain status.'
@@ -175,18 +176,14 @@ export const updateItem = async (req, res) => {
         });
     } catch (error) {
         console.error('updateItem error:', error);
-
-        // Tangani error duplikasi dari database (MySQL error code 1062)
         if (error.code === 'ER_DUP_ENTRY' || error.errno === 1062) {
             return res.status(400).json({ message: 'SKU sudah digunakan' });
         }
-
         res.status(500).json({ message: 'Terjadi kesalahan saat mengupdate barang.' });
     }
 };
 
-// POST /api/items/:id/report — pegawai bisa lapor barang yang SEDANG dipinjam olehnya
-// sendiri (misal hilang), admin bisa lapor barang apapun yang sedang dipinjam.
+// POST /api/items/:id/report — lapor barang hilang/rusak
 export const reportItem = async (req, res) => {
     const itemId = req.params.id;
     const userId = req.user.id;
@@ -226,8 +223,6 @@ export const reportItem = async (req, res) => {
             return res.status(403).json({ message: 'Anda hanya bisa melaporkan barang yang sedang Anda pinjam sendiri.' });
         }
 
-        // Barang tidak lagi berstatus "dipinjam" begitu dilaporkan, jadi transaksi
-        // peminjaman terkait ditutup juga supaya tidak nyangkut di daftar pinjaman aktif.
         if (tx) {
             await Transaction.complete(tx.id, conn);
         }
