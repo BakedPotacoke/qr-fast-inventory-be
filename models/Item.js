@@ -13,9 +13,24 @@ const Item = {
         const [result] = await conn.query('UPDATE items SET status = ? WHERE id = ?', [status, id]);
         return result.affectedRows;
     },
-    findAll: async ({ status } = {}, conn = db) => {
+    findAll: async ({ status, kategori } = {}, conn = db) => {
         const validStatuses = ['tersedia', 'dipinjam', 'rusak', 'hilang'];
-        const useFilter = status && validStatuses.includes(status);
+        const useStatusFilter = status && validStatuses.includes(status);
+        const useKategoriFilter = kategori && kategori.trim() !== '';
+
+        const conditions = [];
+        const params = [];
+
+        if (useStatusFilter) {
+            conditions.push('i.status = ?');
+            params.push(status);
+        }
+        if (useKategoriFilter) {
+            conditions.push('i.kategori = ?');
+            params.push(kategori.trim());
+        }
+
+        const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
         const query = `
             SELECT 
@@ -25,12 +40,21 @@ const Item = {
             FROM items i
             LEFT JOIN transactions t ON i.id = t.item_id AND t.status_transaksi = 'dipinjam'
             LEFT JOIN users u ON t.user_id = u.id
-            ${useFilter ? 'WHERE i.status = ?' : ''}
+            ${whereClause}
             ORDER BY i.id DESC
         `;
-        const params = useFilter ? [status] : [];
         const [rows] = await conn.query(query, params);
         return rows;
+    },
+    // Daftar kategori unik untuk dropdown/chip filter di frontend
+    getKategoriList: async (conn = db) => {
+        const [rows] = await conn.query(
+            `SELECT DISTINCT kategori 
+             FROM items 
+             WHERE kategori IS NOT NULL AND kategori != '' 
+             ORDER BY kategori ASC`
+        );
+        return rows.map((r) => r.kategori);
     },
     // Tambah cloudinary_public_id ke INSERT
     create: async ({ nama_barang, qr_code, kategori, gambar_url, cloudinary_public_id }) => {

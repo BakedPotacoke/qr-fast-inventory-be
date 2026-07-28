@@ -1,11 +1,15 @@
 import express from 'express';
-import { getAllItems, createItem, deleteItems, updateItem, reportItem } from '../controller/itemController.js';
+import { getAllItems, getKategoriList, createItem, deleteItems, updateItem, reportItem } from '../controller/itemController.js';
 import { verifyToken, isAdmin } from '../middleware/authMiddleware.js';
 import upload, { processAndUploadImage } from '../middleware/uploadMiddleware.js';
 
 const router = express.Router();
 
 // ===== ROUTES =====
+
+// GET /api/items/kategori — daftar kategori unik untuk filter dropdown
+// HARUS didaftarkan sebelum route lain yang memakai path dinamis seperti /:id
+router.get('/kategori', verifyToken, getKategoriList);
 
 // GET /api/items — semua user login bisa akses daftar barang
 router.get('/', verifyToken, getAllItems);
@@ -24,4 +28,4 @@ router.post('/:id/report', verifyToken, reportItem);
 // DELETE /api/items — hanya admin yang boleh menghapus (bulk delete)
 router.delete('/', verifyToken, isAdmin, deleteItems);
 
-export default router;
+export default router;  

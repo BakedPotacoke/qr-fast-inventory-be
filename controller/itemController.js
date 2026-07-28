@@ -14,14 +14,25 @@ const deleteFromCloudinary = async (publicId) => {
     }
 };
 
-// GET /api/items — semua user terautentikasi bisa akses
+// GET /api/items?status=&kategori= — semua user terautentikasi bisa akses
 export const getAllItems = async (req, res) => {
     try {
-        const { status } = req.query;
-        const items = await Item.findAll({ status });
+        const { status, kategori } = req.query;
+        const items = await Item.findAll({ status, kategori });
         res.status(200).json({ data: items });
     } catch (error) {
         console.error('getAllItems error:', error);
+        res.status(500).json({ message: 'Terjadi kesalahan pada server.' });
+    }
+};
+
+// GET /api/items/kategori — daftar kategori unik, dipakai untuk populate filter di frontend
+export const getKategoriList = async (req, res) => {
+    try {
+        const kategoriList = await Item.getKategoriList();
+        res.status(200).json({ data: kategoriList });
+    } catch (error) {
+        console.error('getKategoriList error:', error);
         res.status(500).json({ message: 'Terjadi kesalahan pada server.' });
     }
 };

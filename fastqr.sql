@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1:3306
--- Generation Time: Jul 27, 2026 at 02:28 AM
+-- Generation Time: Jul 28, 2026 at 03:49 AM
 -- Server version: 8.4.7
 -- PHP Version: 8.3.28
 
@@ -38,15 +38,20 @@ CREATE TABLE IF NOT EXISTS `items` (
   `status` enum('tersedia','dipinjam','rusak','hilang') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT 'tersedia',
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  UNIQUE KEY `qr_code` (`qr_code`)
-) ENGINE=InnoDB AUTO_INCREMENT=31 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  UNIQUE KEY `qr_code` (`qr_code`),
+  KEY `idx_kategori` (`kategori`),
+  KEY `idx_status` (`status`),
+  KEY `idx_kategori_status` (`kategori`,`status`)
+) ENGINE=InnoDB AUTO_INCREMENT=37 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 --
 -- Dumping data for table `items`
 --
 
 INSERT INTO `items` (`id`, `qr_code`, `nama_barang`, `kategori`, `gambar_url`, `cloudinary_public_id`, `status`, `created_at`) VALUES
-(30, 'KAM', 'kamera', 'kamera', 'https://res.cloudinary.com/daoauzqpd/image/upload/v1785046671/qrfast/items/2bef7770-146b-4efd-b8dd-994eeff8c25f.webp', 'qrfast/items/2bef7770-146b-4efd-b8dd-994eeff8c25f', 'dipinjam', '2026-07-26 06:18:05');
+(33, '1', 'Kamera', 'kamera', NULL, NULL, 'dipinjam', '2026-07-27 04:37:18'),
+(35, '2', 'Kamera', 'Elektronik', NULL, NULL, 'tersedia', '2026-07-27 04:37:53'),
+(36, 'KAMERA', 'Kamera', 'Elektronik', NULL, NULL, 'tersedia', '2026-07-28 03:11:25');
 
 -- --------------------------------------------------------
 
@@ -60,14 +65,16 @@ CREATE TABLE IF NOT EXISTS `item_reports` (
   `item_id` int NOT NULL,
   `user_id` int NOT NULL,
   `transaction_id` int DEFAULT NULL,
-  `jenis_laporan` enum('rusak','hilang') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `jenis_laporan` enum('rusak','hilang','baik') COLLATE utf8mb4_unicode_ci NOT NULL,
   `keterangan` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+  `foto_url` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `cloudinary_public_id` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `fk_report_item` (`item_id`),
   KEY `fk_report_user` (`user_id`),
   KEY `fk_report_transaction` (`transaction_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=7 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- --------------------------------------------------------
 
@@ -86,21 +93,14 @@ CREATE TABLE IF NOT EXISTS `transactions` (
   PRIMARY KEY (`id`),
   KEY `fk_transaction_user` (`user_id`),
   KEY `fk_transaction_item` (`item_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=62 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=67 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 --
 -- Dumping data for table `transactions`
 --
 
 INSERT INTO `transactions` (`id`, `user_id`, `item_id`, `waktu_pinjam`, `waktu_kembali`, `status_transaksi`) VALUES
-(54, 6, 30, '2026-07-26 06:18:30', '2026-07-26 06:19:03', 'selesai'),
-(55, 6, 30, '2026-07-26 06:21:57', '2026-07-26 07:17:46', 'selesai'),
-(56, 6, 30, '2026-07-26 07:17:51', '2026-07-26 07:30:14', 'selesai'),
-(57, 6, 30, '2026-07-26 11:05:44', '2026-07-26 11:19:07', 'selesai'),
-(58, 6, 30, '2026-07-26 11:19:13', '2026-07-26 11:20:09', 'selesai'),
-(59, 6, 30, '2026-07-26 11:20:12', '2026-07-26 11:36:48', 'selesai'),
-(60, 4, 30, '2026-07-26 11:36:51', '2026-07-26 11:36:58', 'selesai'),
-(61, 6, 30, '2026-07-27 02:10:10', NULL, 'dipinjam');
+(66, 6, 33, '2026-07-27 04:38:47', NULL, 'dipinjam');
 
 -- --------------------------------------------------------
 
