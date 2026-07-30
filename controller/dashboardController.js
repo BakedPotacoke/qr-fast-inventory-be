@@ -14,20 +14,24 @@ export const getDashboardSummary = async (req, res) => {
             status: item.status === 'dipinjam' ? 'Sedang Dipinjam' : item.status
         }));
 
-        // 2. Dapatkan ringkasan inventaris (lewat Model)
+        // 2. Dapatkan 5 riwayat transaksi terakhir user yang sudah selesai (lewat Model)
+        const riwayatPinjaman = await Transaction.getRecentLoansByUser(userId, 5);
+
+        // 3. Dapatkan ringkasan inventaris (lewat Model)
         const inventarisSummary = await Item.getInventorySummary();
 
-        // 3. Data stat cards
+        // 4. Data stat cards
         const statCards = {
             sedangDipinjam: inventarisSummary.sedangDipinjam,
             transaksiAktif: inventarisSummary.sedangDipinjam, // simplifikasi
-            tersedia: inventarisSummary.totalBarang - inventarisSummary.sedangDipinjam - inventarisSummary.jumlahRusak - inventarisSummary.jumlahHilang,
+            tersedia: inventarisSummary.tersedia,
             jumlahRusak: inventarisSummary.jumlahRusak,
             jumlahHilang: inventarisSummary.jumlahHilang
         };
 
         res.status(200).json({
             pinjaman: pinjamanUser,
+            riwayat: riwayatPinjaman,
             inventaris: inventarisSummary,
             stats: statCards
         });

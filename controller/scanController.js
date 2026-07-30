@@ -217,8 +217,8 @@ export const confirmReturn = async (req, res) => {
         return res.status(200).json({
             status: kondisi === 'rusak' ? 'kembali_rusak' : 'kembali',
             message: kondisi === 'rusak'
-                ? `"${barang.nama_barang}" telah dikembalikan dan ditandai rusak. Laporan sudah dikirim ke admin.`
-                : `"${barang.nama_barang}" berhasil dikembalikan dalam kondisi baik.`,
+                ? `${barang.nama_barang} telah dikembalikan dan ditandai rusak. Laporan sudah dikirim ke admin.`
+                : `${barang.nama_barang} berhasil dikembalikan dalam kondisi baik.`,
             barang
         });
     } catch (error) {

@@ -66,11 +66,13 @@ const Item = {
     },
     getInventorySummary: async (conn = db) => {
         const [totalRows] = await conn.query('SELECT COUNT(*) as totalBarang FROM items');
+        const [tersediaRows] = await conn.query('SELECT COUNT(*) as tersedia FROM items WHERE status = "tersedia"');
         const [dipinjamRows] = await conn.query('SELECT COUNT(*) as sedangDipinjam FROM items WHERE status = "dipinjam"');
         const [rusakRows] = await conn.query('SELECT COUNT(*) as jumlahRusak FROM items WHERE status = "rusak"');
         const [hilangRows] = await conn.query('SELECT COUNT(*) as jumlahHilang FROM items WHERE status = "hilang"');
         return {
             totalBarang: totalRows[0].totalBarang,
+            tersedia: tersediaRows[0].tersedia,
             sedangDipinjam: dipinjamRows[0].sedangDipinjam,
             jumlahRusak: rusakRows[0].jumlahRusak,
             jumlahHilang: hilangRows[0].jumlahHilang

@@ -44,6 +44,25 @@ const Transaction = {
         `, [userId]);
         return rows;
     },
+    getRecentLoansByUser: async (userId, limit = 5, conn = db) => {
+        const [rows] = await conn.query(`
+            SELECT 
+                t.id as transaction_id,
+                t.user_id,
+                t.status_transaksi as status,
+                t.waktu_kembali,
+                i.id, 
+                i.nama_barang, 
+                i.kategori, 
+                i.gambar_url as gambar
+            FROM transactions t
+            JOIN items i ON t.item_id = i.id
+            WHERE t.user_id = ? AND t.status_transaksi = 'selesai'
+            ORDER BY t.waktu_pinjam DESC
+            LIMIT ?
+        `, [userId, Number(limit)]);
+        return rows;
+    },
     findByUserId: async (userId, conn = db) => {
         const query = `
             SELECT 
