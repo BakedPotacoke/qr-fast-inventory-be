@@ -26,6 +26,19 @@ const Transaction = {
         );
         return result.affectedRows;
     },
+    // Ubah status transaksi secara umum (dipinjam <-> selesai).
+    // Saat diubah ke "selesai", waktu_kembali diisi otomatis.
+    // Saat dikembalikan ke "dipinjam" (mis. koreksi kesalahan admin), waktu_kembali direset ke NULL.
+    updateStatus: async (id, status, conn = db) => {
+        const [result] = await conn.query(
+            `UPDATE transactions
+             SET status_transaksi = ?,
+                 waktu_kembali = CASE WHEN ? = 'selesai' THEN CURRENT_TIMESTAMP ELSE NULL END
+             WHERE id = ?`,
+            [status, status, id]
+        );
+        return result.affectedRows;
+    },
     getActiveLoansByUser: async (userId, conn = db) => {
         const [rows] = await conn.query(`
             SELECT 
