@@ -1,43 +1,64 @@
 import Item from '../models/Item.js';
 import Transaction from '../models/Transaction.js';
+import ItemReport from '../models/ItemReport.js';
+import User from '../models/User.js';
 
-export const getDashboardSummary = async (req, res) => {
+// GET /api/dashboard/me — ringkasan personal untuk halaman Beranda (semua role login)
+// Bentuk response SENGAJA beda dari getDashboardSummary (admin): { pinjaman, riwayat, inventaris }
+export const getMyDashboardSummary = async (req, res) => {
     try {
         const userId = req.user.id;
 
-        // 1. Dapatkan daftar barang yang sedang dipinjam oleh user (lewat Model)
-        const pinjamanRows = await Transaction.getActiveLoansByUser(userId);
+        const [pinjaman, riwayat, inventaris] = await Promise.all([
+            Transaction.getActiveLoansByUser(userId),
+            Transaction.getRecentLoansByUser(userId, 5),
+            Item.getInventorySummary(),
+        ]);
 
-        // Karena di frontend statusnya "Sedang Dipinjam", kita mapping sedikit statusnya
-        const pinjamanUser = pinjamanRows.map(item => ({
-            ...item,
-            status: item.status === 'dipinjam' ? 'Sedang Dipinjam' : item.status
-        }));
+        res.status(200).json({ pinjaman, riwayat, inventaris });
+    } catch (error) {
+        console.error('getMyDashboardSummary error:', error);
+        res.status(500).json({ message: 'Terjadi kesalahan saat mengambil ringkasan dashboard.' });
+    }
+};
 
-        // 2. Dapatkan 5 riwayat transaksi terakhir user yang sudah selesai (lewat Model)
-        const riwayatPinjaman = await Transaction.getRecentLoansByUser(userId, 5);
-
-        // 3. Dapatkan ringkasan inventaris (lewat Model)
-        const inventarisSummary = await Item.getInventorySummary();
-
-        // 4. Data stat cards
-        const statCards = {
-            sedangDipinjam: inventarisSummary.sedangDipinjam,
-            transaksiAktif: inventarisSummary.sedangDipinjam, // simplifikasi
-            tersedia: inventarisSummary.tersedia,
-            jumlahRusak: inventarisSummary.jumlahRusak,
-            jumlahHilang: inventarisSummary.jumlahHilang
-        };
+// GET /api/dashboard/summary — ringkasan statistik untuk dashboard admin
+export const getDashboardSummary = async (req, res) => {
+    try {
+        const [
+            inventory,
+            totalPengguna,
+            kategoriBreakdown,
+            trenPeminjaman,
+            laporanBreakdown,
+            topBarang,
+            transaksiAktif,
+            laporanTerbaru,
+        ] = await Promise.all([
+            Item.getInventorySummary(),
+            User.count(),
+            Item.getKategoriBreakdown(),
+            Transaction.getTrenPeminjaman(7),
+            ItemReport.getBreakdownByJenis(),
+            Transaction.getTopBarang(5),
+            Transaction.countActive(),
+            ItemReport.countRecent(30),
+        ]);
 
         res.status(200).json({
-            pinjaman: pinjamanUser,
-            riwayat: riwayatPinjaman,
-            inventaris: inventarisSummary,
-            stats: statCards
+            data: {
+                inventory,
+                totalPengguna,
+                transaksiAktif,
+                laporanTerbaru,
+                kategoriBreakdown,
+                trenPeminjaman,
+                laporanBreakdown,
+                topBarang,
+            },
         });
-
     } catch (error) {
-        console.error("Error getDashboardSummary:", error);
-        res.status(500).json({ message: "Terjadi kesalahan pada server saat mengambil data dashboard." });
+        console.error('getDashboardSummary error:', error);
+        res.status(500).json({ message: 'Terjadi kesalahan saat mengambil ringkasan dashboard.' });
     }
 };

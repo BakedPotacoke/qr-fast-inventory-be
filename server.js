@@ -18,8 +18,12 @@ import userRouter from './routes/userRoutes.js';
 import itemRouter from './routes/itemRoutes.js';
 import dashboardRouter from './routes/dashboardRoutes.js';
 import transactionRouter from './routes/transactionRoutes.js';
+import dashboardAdminRoutes from './routes/dashboardAdminRoutes.js';
+import dashboardUserRoutes from './routes/dashboardRoutes.js';
 
 // Daftarkan URL Endpoint
+app.use('/api/dashboard', dashboardAdminRoutes); // GET /api/dashboard/summary (admin only)
+app.use('/api/dashboard', dashboardUserRoutes);  // GET /api/dashboard/me (semua user login)
 app.use('/api', scanRouter);
 app.use('/api/auth', authRouter);
 app.use('/api/users', userRouter);

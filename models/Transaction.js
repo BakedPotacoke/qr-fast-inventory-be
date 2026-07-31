@@ -103,7 +103,39 @@ const Transaction = {
         `;
         const [rows] = await conn.query(query);
         return rows;
-    }
+    },
+    // Jumlah transaksi baru per hari, N hari terakhir — dipakai untuk area chart tren
+    getTrenPeminjaman: async (days = 7, conn = db) => {
+        const [rows] = await conn.query(
+            `SELECT DATE(waktu_pinjam) AS tanggal, COUNT(*) AS jumlah
+             FROM transactions
+             WHERE waktu_pinjam >= CURDATE() - INTERVAL ? DAY
+             GROUP BY DATE(waktu_pinjam)
+             ORDER BY tanggal ASC`,
+            [Number(days)]
+        );
+        return rows;
+    },
+    // Barang paling sering dipinjam (all-time) — dipakai untuk ranking chart
+    getTopBarang: async (limit = 5, conn = db) => {
+        const [rows] = await conn.query(
+            `SELECT i.id, i.nama_barang, COUNT(*) AS dipinjam
+             FROM transactions t
+             JOIN items i ON i.id = t.item_id
+             GROUP BY i.id, i.nama_barang
+             ORDER BY dipinjam DESC
+             LIMIT ?`,
+            [Number(limit)]
+        );
+        return rows;
+    },
+    // Jumlah transaksi yang masih berstatus 'dipinjam'
+    countActive: async (conn = db) => {
+        const [rows] = await conn.query(
+            `SELECT COUNT(*) AS jumlah FROM transactions WHERE status_transaksi = 'dipinjam'`
+        );
+        return rows[0].jumlah;
+    },
 };
 
 export default Transaction;

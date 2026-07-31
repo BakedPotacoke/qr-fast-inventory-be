@@ -33,7 +33,26 @@ const ItemReport = {
              ORDER BY r.created_at DESC`
         );
         return rows;
-    }
+    },
+
+    // Jumlah laporan per jenis (baik/rusak/hilang) — dipakai untuk donut chart dashboard
+    getBreakdownByJenis: async (conn = db) => {
+        const [rows] = await conn.query(
+            `SELECT jenis_laporan, COUNT(*) AS jumlah
+             FROM item_reports
+             GROUP BY jenis_laporan`
+        );
+        return rows;
+    },
+
+    // Jumlah laporan dalam N hari terakhir — dipakai untuk KPI card dashboard
+    countRecent: async (days = 30, conn = db) => {
+        const [rows] = await conn.query(
+            `SELECT COUNT(*) AS jumlah FROM item_reports WHERE created_at >= CURDATE() - INTERVAL ? DAY`,
+            [Number(days)]
+        );
+        return rows[0].jumlah;
+    },
 };
 
 export default ItemReport;

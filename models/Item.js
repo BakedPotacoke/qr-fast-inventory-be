@@ -56,6 +56,16 @@ const Item = {
         );
         return rows.map((r) => r.kategori);
     },
+    // Jumlah barang per kategori — dipakai untuk chart dashboard
+    getKategoriBreakdown: async (conn = db) => {
+        const [rows] = await conn.query(
+            `SELECT COALESCE(NULLIF(kategori, ''), 'Lainnya') AS kategori, COUNT(*) AS jumlah
+             FROM items
+             GROUP BY kategori
+             ORDER BY jumlah DESC`
+        );
+        return rows;
+    },
     // Tambah cloudinary_public_id ke INSERT
     create: async ({ nama_barang, qr_code, kategori, gambar_url, cloudinary_public_id }) => {
         const [result] = await db.query(

@@ -53,7 +53,12 @@ const User = {
     delete: async (id, conn = db) => {
         const [result] = await conn.query('DELETE FROM users WHERE id = ?', [id]);
         return result.affectedRows;
-    }
+    },
+    // Total pengguna terdaftar — dipakai untuk KPI card dashboard
+    count: async (conn = db) => {
+        const [rows] = await conn.query('SELECT COUNT(*) AS jumlah FROM users');
+        return rows[0].jumlah;
+    },
 };
 
 export default User;
