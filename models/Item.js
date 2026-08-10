@@ -13,7 +13,9 @@ const Item = {
         const [result] = await conn.query('UPDATE items SET status = ? WHERE id = ?', [status, id]);
         return result.affectedRows;
     },
-    findAll: async ({ status, kategori } = {}, conn = db) => {
+    // Sekarang mendukung pagination (page, limit).
+    // Mengembalikan { rows, total } — total dipakai controller untuk membangun metadata pagination.
+    findAll: async ({ status, kategori, page = 1, limit = 10 } = {}, conn = db) => {
         const validStatuses = ['tersedia', 'dipinjam', 'rusak', 'hilang'];
         const useStatusFilter = status && validStatuses.includes(status);
         const useKategoriFilter = kategori && kategori.trim() !== '';
@@ -32,7 +34,10 @@ const Item = {
 
         const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
-        const query = `
+        const safeLimit = Number(limit);
+        const safeOffset = (Number(page) - 1) * safeLimit;
+
+        const dataQuery = `
             SELECT 
                 i.*, 
                 t.waktu_pinjam,
@@ -42,9 +47,15 @@ const Item = {
             LEFT JOIN users u ON t.user_id = u.id
             ${whereClause}
             ORDER BY i.id DESC
+            LIMIT ? OFFSET ?
         `;
-        const [rows] = await conn.query(query, params);
-        return rows;
+        // Count tidak perlu ikut JOIN karena filter (status, kategori) hanya menyentuh tabel items.
+        const countQuery = `SELECT COUNT(*) AS total FROM items i ${whereClause}`;
+
+        const [rows] = await conn.query(dataQuery, [...params, safeLimit, safeOffset]);
+        const [countRows] = await conn.query(countQuery, params);
+
+        return { rows, total: countRows[0].total };
     },
     // Daftar kategori unik untuk dropdown/chip filter di frontend
     getKategoriList: async (conn = db) => {

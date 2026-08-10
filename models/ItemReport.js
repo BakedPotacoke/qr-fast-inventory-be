@@ -10,7 +10,9 @@ const ItemReport = {
         return result.insertId;
     },
 
-    // Riwayat laporan untuk satu barang, terbaru dulu
+    // Riwayat laporan untuk satu barang, terbaru dulu.
+    // Catatan: belum dipaginasi — kalau nanti diekspos langsung lewat endpoint publik
+    // (bukan cuma dipakai internal), tambahkan LIMIT/OFFSET dengan pola yang sama seperti findAll di bawah.
     findByItemId: async (item_id, conn = db) => {
         const [rows] = await conn.query(
             `SELECT r.*, u.nama_lengkap AS pelapor
@@ -25,9 +27,11 @@ const ItemReport = {
 
     // Semua laporan (dipakai admin untuk memantau laporan masuk & halaman Laporan Pengembalian)
     // JOIN ke transactions untuk waktu_pinjam/waktu_kembali, dan ke items untuk kategori.
-    findAll: async (conn = db) => {
-        const [rows] = await conn.query(
-            `SELECT
+    // Mendukung pagination (page, limit) ATAU mode all=true (untuk ekspor CSV tanpa LIMIT).
+    // Mengembalikan { rows, total }.
+    findAll: async ({ page = 1, limit = 10, all = false } = {}, conn = db) => {
+        const baseQuery = `
+            SELECT
                 r.*,
                 u.nama_lengkap AS peminjam,
                 i.nama_barang,
@@ -39,9 +43,22 @@ const ItemReport = {
              LEFT JOIN users u ON r.user_id = u.id
              LEFT JOIN items i ON r.item_id = i.id
              LEFT JOIN transactions t ON r.transaction_id = t.id
-             ORDER BY r.created_at DESC`
-        );
-        return rows;
+             ORDER BY r.created_at DESC, r.id DESC
+        `;
+        const [countRows] = await conn.query('SELECT COUNT(*) AS total FROM item_reports');
+        const total = countRows[0].total;
+
+        if (all) {
+            // Tanpa LIMIT — dipakai hanya untuk ekspor CSV
+            const [rows] = await conn.query(baseQuery);
+            return { rows, total };
+        }
+
+        const safeLimit = Number(limit);
+        const safeOffset = (Number(page) - 1) * safeLimit;
+        const [rows] = await conn.query(baseQuery + ' LIMIT ? OFFSET ?', [safeLimit, safeOffset]);
+
+        return { rows, total };
     },
 
     // Jumlah laporan per jenis (baik/rusak/hilang) — dipakai untuk donut chart dashboard

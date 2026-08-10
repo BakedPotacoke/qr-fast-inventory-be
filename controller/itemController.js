@@ -3,6 +3,7 @@ import Item from '../models/Item.js';
 import Transaction from '../models/Transaction.js';
 import ItemReport from '../models/ItemReport.js';
 import cloudinary from '../config/cloudinary.js';
+import { parsePagination, buildPaginationMeta } from '../utils/pagination.js';
 
 // ─── Helper: hapus gambar dari Cloudinary ───────────────────────────────────
 const deleteFromCloudinary = async (publicId) => {
@@ -14,12 +15,18 @@ const deleteFromCloudinary = async (publicId) => {
     }
 };
 
-// GET /api/items?status=&kategori= — semua user terautentikasi bisa akses
+// GET /api/items?status=&kategori=&page=&limit= — semua user terautentikasi bisa akses
 export const getAllItems = async (req, res) => {
     try {
         const { status, kategori } = req.query;
-        const items = await Item.findAll({ status, kategori });
-        res.status(200).json({ data: items });
+        const { page, limit } = parsePagination(req.query);
+
+        const { rows, total } = await Item.findAll({ status, kategori, page, limit });
+
+        res.status(200).json({
+            data: rows,
+            pagination: buildPaginationMeta(page, limit, total),
+        });
     } catch (error) {
         console.error('getAllItems error:', error);
         res.status(500).json({ message: 'Terjadi kesalahan pada server.' });

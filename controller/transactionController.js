@@ -1,58 +1,100 @@
 import Transaction from '../models/Transaction.js';
+import Item from '../models/Item.js';
+import { parsePagination, buildPaginationMeta } from '../utils/pagination.js';
 
-const VALID_STATUSES = ['dipinjam', 'selesai'];
-
-// GET /api/transactions — fetch transaction history (admin: all, pegawai: own only)
+// GET /api/transactions?page=&limit=&status=&kategori= — admin only
+// Mengembalikan semua transaksi dengan server-side pagination + filter status/kategori.
 export const getAllTransactions = async (req, res) => {
     try {
-        let transactions;
-        if (req.user.role === 'admin') {
-            transactions = await Transaction.findAll();
-        } else {
-            transactions = await Transaction.findByUserId(req.user.id);
-        }
-        res.status(200).json({ data: transactions });
+        const { page, limit } = parsePagination(req.query);
+        const { status, kategori } = req.query;
+        const { rows, total } = await Transaction.findAll({ page, limit, status, kategori });
+
+        return res.status(200).json({
+            success: true,
+            data: rows,
+            pagination: buildPaginationMeta(page, limit, total),
+        });
     } catch (error) {
         console.error('getAllTransactions error:', error);
-        res.status(500).json({ message: 'Terjadi kesalahan pada server saat mengambil riwayat transaksi.' });
+        return res.status(500).json({
+            success: false,
+            data: [],
+            message: 'Gagal mengambil data transaksi. Silakan coba lagi.',
+        });
     }
 };
 
-// PATCH /api/transactions/:id/status — admin only, ubah status transaksi (dipinjam <-> selesai)
-// body: { status: 'dipinjam' | 'selesai' }
-export const updateTransactionStatus = async (req, res) => {
+// GET /api/transactions/me?page=&limit= — user yang sedang login
+// Riwayat transaksi milik user sendiri.
+export const getMyTransactions = async (req, res) => {
     try {
-        if (req.user.role !== 'admin') {
-            return res.status(403).json({ message: 'Hanya admin yang dapat mengubah status transaksi.' });
-        }
+        const userId = req.user.id;
+        const { page, limit } = parsePagination(req.query);
+        const { rows, total } = await Transaction.findByUserId(userId, { page, limit });
 
-        const { id } = req.params;
-        const { status } = req.body;
+        return res.status(200).json({
+            success: true,
+            data: rows,
+            pagination: buildPaginationMeta(page, limit, total),
+        });
+    } catch (error) {
+        console.error('getMyTransactions error:', error);
+        return res.status(500).json({
+            success: false,
+            data: [],
+            message: 'Gagal mengambil riwayat transaksi. Silakan coba lagi.',
+        });
+    }
+};
 
-        if (!VALID_STATUSES.includes(status)) {
-            return res.status(400).json({
-                message: `Status tidak valid. Gunakan salah satu dari: ${VALID_STATUSES.join(', ')}.`,
-            });
-        }
+// PATCH /api/transactions/:id/status — admin only
+// Ubah status transaksi antara 'dipinjam' dan 'selesai'.
+// Jika diubah ke 'selesai': barang dikembalikan ke status 'tersedia'.
+// Jika diubah ke 'dipinjam': barang dikembalikan ke status 'dipinjam'.
+export const updateTransactionStatus = async (req, res) => {
+    const { id } = req.params;
+    const { status } = req.body;
 
+    const VALID_STATUSES = ['dipinjam', 'selesai'];
+    if (!VALID_STATUSES.includes(status)) {
+        return res.status(400).json({
+            message: `Status tidak valid. Nilai yang diizinkan: ${VALID_STATUSES.join(', ')}.`,
+        });
+    }
+
+    try {
         const transaction = await Transaction.findById(id);
         if (!transaction) {
             return res.status(404).json({ message: 'Transaksi tidak ditemukan.' });
         }
-
         if (transaction.status_transaksi === status) {
-            return res.status(400).json({ message: `Transaksi ini sudah berstatus "${status}".` });
+            return res.status(400).json({ message: 'Status transaksi sudah sama, tidak ada perubahan.' });
         }
 
-        const affectedRows = await Transaction.updateStatus(id, status);
-        if (!affectedRows) {
-            return res.status(500).json({ message: 'Gagal memperbarui status transaksi.' });
-        }
+        // Update status transaksi (waktu_kembali diisi otomatis oleh model)
+        await Transaction.updateStatus(id, status);
 
+        // Sinkronisasi status barang
+        const itemStatus = status === 'selesai' ? 'tersedia' : 'dipinjam';
+        await Item.updateStatus(transaction.item_id, itemStatus);
+
+        // Ambil waktu_kembali terbaru untuk dikirim ke frontend
         const updated = await Transaction.findById(id);
-        res.status(200).json({ message: `Status transaksi berhasil diubah menjadi "${status}".`, data: updated });
+
+        return res.status(200).json({
+            success: true,
+            message: `Status transaksi berhasil diubah ke "${status}".`,
+            data: {
+                id: Number(id),
+                status,
+                waktu_kembali: updated?.waktu_kembali ?? null,
+            },
+        });
     } catch (error) {
         console.error('updateTransactionStatus error:', error);
-        res.status(500).json({ message: 'Terjadi kesalahan pada server saat memperbarui status transaksi.' });
+        return res.status(500).json({
+            message: 'Terjadi kesalahan saat memperbarui status transaksi.',
+        });
     }
 };
