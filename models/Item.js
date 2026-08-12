@@ -13,12 +13,14 @@ const Item = {
         const [result] = await conn.query('UPDATE items SET status = ? WHERE id = ?', [status, id]);
         return result.affectedRows;
     },
-    // Sekarang mendukung pagination (page, limit).
+    // Mendukung pagination (page, limit), filter status & kategori, serta pencarian teks (search).
+    // Parameter search mencari di nama_barang atau qr_code.
     // Mengembalikan { rows, total } — total dipakai controller untuk membangun metadata pagination.
-    findAll: async ({ status, kategori, page = 1, limit = 10 } = {}, conn = db) => {
+    findAll: async ({ status, kategori, search, sortBy = 'terbaru', page = 1, limit = 10 } = {}, conn = db) => {
         const validStatuses = ['tersedia', 'dipinjam', 'rusak', 'hilang'];
         const useStatusFilter = status && validStatuses.includes(status);
         const useKategoriFilter = kategori && kategori.trim() !== '';
+        const useSearchFilter = search && search.trim() !== '';
 
         const conditions = [];
         const params = [];
@@ -31,11 +33,24 @@ const Item = {
             conditions.push('i.kategori = ?');
             params.push(kategori.trim());
         }
+        if (useSearchFilter) {
+            conditions.push('(i.nama_barang LIKE ? OR i.qr_code LIKE ?)');
+            const term = `%${search.trim()}%`;
+            params.push(term, term);
+        }
 
         const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
         const safeLimit = Number(limit);
         const safeOffset = (Number(page) - 1) * safeLimit;
+
+        const ORDER_MAP = {
+            terbaru: 'i.id DESC',
+            terlama: 'i.id ASC',
+            az:      'i.nama_barang ASC',
+            za:      'i.nama_barang DESC',
+        };
+        const orderBy = ORDER_MAP[sortBy] ?? ORDER_MAP.terbaru;
 
         const dataQuery = `
             SELECT 
@@ -46,16 +61,16 @@ const Item = {
             LEFT JOIN transactions t ON i.id = t.item_id AND t.status_transaksi = 'dipinjam'
             LEFT JOIN users u ON t.user_id = u.id
             ${whereClause}
-            ORDER BY i.id DESC
+            ORDER BY ${orderBy}
             LIMIT ? OFFSET ?
         `;
-        // Count tidak perlu ikut JOIN karena filter (status, kategori) hanya menyentuh tabel items.
+        // Count tidak perlu ikut JOIN karena filter (status, kategori, search) hanya menyentuh tabel items.
         const countQuery = `SELECT COUNT(*) AS total FROM items i ${whereClause}`;
 
         const [rows] = await conn.query(dataQuery, [...params, safeLimit, safeOffset]);
         const [countRows] = await conn.query(countQuery, params);
 
-        return { rows, total: countRows[0].total };
+        return { rows, total: Number(countRows[0].total) || 0 };
     },
     // Daftar kategori unik untuk dropdown/chip filter di frontend
     getKategoriList: async (conn = db) => {
@@ -85,18 +100,25 @@ const Item = {
         );
         return result.insertId;
     },
+    // Satu kueri agregasi kondisional menggantikan 5 kueri COUNT terpisah — jauh lebih efisien.
+    // Nilai dikembalikan sebagai Number untuk menghindari BigInt atau null dari MySQL driver.
     getInventorySummary: async (conn = db) => {
-        const [totalRows] = await conn.query('SELECT COUNT(*) as totalBarang FROM items');
-        const [tersediaRows] = await conn.query('SELECT COUNT(*) as tersedia FROM items WHERE status = "tersedia"');
-        const [dipinjamRows] = await conn.query('SELECT COUNT(*) as sedangDipinjam FROM items WHERE status = "dipinjam"');
-        const [rusakRows] = await conn.query('SELECT COUNT(*) as jumlahRusak FROM items WHERE status = "rusak"');
-        const [hilangRows] = await conn.query('SELECT COUNT(*) as jumlahHilang FROM items WHERE status = "hilang"');
+        const [rows] = await conn.query(`
+            SELECT
+                COUNT(*)                                          AS totalBarang,
+                SUM(CASE WHEN status = 'tersedia' THEN 1 ELSE 0 END) AS tersedia,
+                SUM(CASE WHEN status = 'dipinjam' THEN 1 ELSE 0 END) AS sedangDipinjam,
+                SUM(CASE WHEN status = 'rusak'    THEN 1 ELSE 0 END) AS jumlahRusak,
+                SUM(CASE WHEN status = 'hilang'   THEN 1 ELSE 0 END) AS jumlahHilang
+            FROM items
+        `);
+        const r = rows[0];
         return {
-            totalBarang: totalRows[0].totalBarang,
-            tersedia: tersediaRows[0].tersedia,
-            sedangDipinjam: dipinjamRows[0].sedangDipinjam,
-            jumlahRusak: rusakRows[0].jumlahRusak,
-            jumlahHilang: hilangRows[0].jumlahHilang
+            totalBarang:    Number(r.totalBarang)    || 0,
+            tersedia:       Number(r.tersedia)       || 0,
+            sedangDipinjam: Number(r.sedangDipinjam) || 0,
+            jumlahRusak:    Number(r.jumlahRusak)    || 0,
+            jumlahHilang:   Number(r.jumlahHilang)   || 0,
         };
     },
     deleteBulk: async (ids, conn = db) => {

@@ -76,11 +76,38 @@ const Transaction = {
         `, [userId, Number(limit)]);
         return rows;
     },
-    // Sekarang mendukung pagination (page, limit).
+    // Sekarang mendukung pagination (page, limit) serta filter status, kategori, dan search.
     // Mengembalikan { rows, total } — total dipakai controller untuk membangun metadata pagination.
-    findByUserId: async (userId, { page = 1, limit = 10 } = {}, conn = db) => {
+    findByUserId: async (userId, { page = 1, limit = 10, status, kategori, search, sortBy = 'terbaru' } = {}, conn = db) => {
         const safeLimit = Number(limit);
         const safeOffset = (Number(page) - 1) * safeLimit;
+
+        const conditions = ['t.user_id = ?'];
+        const params = [userId];
+
+        if (status && status !== 'semua') {
+            conditions.push('t.status_transaksi = ?');
+            params.push(status);
+        }
+        if (kategori && kategori !== 'semua') {
+            conditions.push('i.kategori = ?');
+            params.push(kategori);
+        }
+        if (search && search.trim() !== '') {
+            conditions.push('(i.nama_barang LIKE ? OR i.qr_code LIKE ?)');
+            const term = `%${search.trim()}%`;
+            params.push(term, term);
+        }
+
+        const whereClause = `WHERE ${conditions.join(' AND ')}`;
+
+        const ORDER_MAP = {
+            terbaru: 't.waktu_pinjam DESC, t.id DESC',
+            terlama: 't.waktu_pinjam ASC,  t.id ASC',
+            az:      'i.nama_barang ASC',
+            za:      'i.nama_barang DESC',
+        };
+        const orderBy = ORDER_MAP[sortBy] ?? ORDER_MAP.terbaru;
 
         const dataQuery = `
             SELECT 
@@ -96,20 +123,26 @@ const Transaction = {
             FROM transactions t
             JOIN items i ON t.item_id = i.id
             JOIN users u ON t.user_id = u.id
-            WHERE t.user_id = ?
-            ORDER BY t.waktu_pinjam DESC, t.id DESC
+            ${whereClause}
+            ORDER BY ${orderBy}
             LIMIT ? OFFSET ?
         `;
-        const [rows] = await conn.query(dataQuery, [userId, safeLimit, safeOffset]);
-        const [countRows] = await conn.query(
-            'SELECT COUNT(*) AS total FROM transactions WHERE user_id = ?',
-            [userId]
-        );
-        return { rows, total: countRows[0].total };
+        const countQuery = `
+            SELECT COUNT(*) AS total
+            FROM transactions t
+            JOIN items i ON t.item_id = i.id
+            JOIN users u ON t.user_id = u.id
+            ${whereClause}
+        `;
+
+        const [rows] = await conn.query(dataQuery, [...params, safeLimit, safeOffset]);
+        const [countRows] = await conn.query(countQuery, params);
+        return { rows, total: Number(countRows[0].total) || 0 };
     },
-    // Sekarang mendukung pagination (page, limit).
+    // Mendukung pagination (page, limit), filter status & kategori, serta pencarian teks (search).
+    // Parameter search mencari di nama_barang, qr_code, atau nama peminjam.
     // Mengembalikan { rows, total } — total dipakai controller untuk membangun metadata pagination.
-    findAll: async ({ page = 1, limit = 10, status, kategori } = {}, conn = db) => {
+    findAll: async ({ page = 1, limit = 10, status, kategori, search, sortBy = 'terbaru' } = {}, conn = db) => {
         const safeLimit = Number(limit);
         const safeOffset = (Number(page) - 1) * safeLimit;
 
@@ -124,8 +157,21 @@ const Transaction = {
             conditions.push('i.kategori = ?');
             params.push(kategori);
         }
+        if (search && search.trim() !== '') {
+            conditions.push('(i.nama_barang LIKE ? OR i.qr_code LIKE ? OR u.nama_lengkap LIKE ?)');
+            const term = `%${search.trim()}%`;
+            params.push(term, term, term);
+        }
 
         const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+        const ORDER_MAP = {
+            terbaru: 't.waktu_pinjam DESC, t.id DESC',
+            terlama: 't.waktu_pinjam ASC,  t.id ASC',
+            az:      'i.nama_barang ASC',
+            za:      'i.nama_barang DESC',
+        };
+        const orderBy = ORDER_MAP[sortBy] ?? ORDER_MAP.terbaru;
 
         const dataQuery = `
             SELECT 
@@ -142,19 +188,20 @@ const Transaction = {
             JOIN items i ON t.item_id = i.id
             JOIN users u ON t.user_id = u.id
             ${whereClause}
-            ORDER BY t.waktu_pinjam DESC, t.id DESC
+            ORDER BY ${orderBy}
             LIMIT ? OFFSET ?
         `;
         const countQuery = `
             SELECT COUNT(*) AS total
             FROM transactions t
             JOIN items i ON t.item_id = i.id
+            JOIN users u ON t.user_id = u.id
             ${whereClause}
         `;
 
         const [rows] = await conn.query(dataQuery, [...params, safeLimit, safeOffset]);
         const [countRows] = await conn.query(countQuery, params);
-        return { rows, total: countRows[0].total };
+        return { rows, total: Number(countRows[0].total) || 0 };
     },
     // Jumlah transaksi baru per hari, N hari terakhir — dipakai untuk area chart tren
     getTrenPeminjaman: async (days = 7, conn = db) => {

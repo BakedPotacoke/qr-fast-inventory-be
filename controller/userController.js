@@ -1,5 +1,6 @@
 import User from '../models/User.js';
 import bcrypt from 'bcryptjs';
+import { parsePagination, buildPaginationMeta } from '../utils/pagination.js'; // 1. Import helper
 
 // ===== HELPER VALIDASI =====
 const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
@@ -15,14 +16,25 @@ const stripPassword = (user) => {
 
 export const getAllUsers = async (req, res) => {
     try {
-        const users = await User.findAll();
-        res.status(200).json({
+        // 2. Gunakan parsePagination untuk parsing query
+        const { page, limit } = parsePagination(req.query);
+        const { role, search, sortBy } = req.query;
+
+        const { rows, total } = await User.findAll({ page, limit, role, search, sortBy });
+
+        // 3. Gunakan buildPaginationMeta dan format response standar
+        return res.status(200).json({
+            success: true,
             message: "Berhasil mengambil data pengguna.",
-            data: users.map(stripPassword)
+            data: rows.map(stripPassword),
+            pagination: buildPaginationMeta(page, limit, total)
         });
     } catch (error) {
         console.error("Get all users error:", error);
-        res.status(500).json({ message: "Terjadi kesalahan pada server." });
+        return res.status(500).json({ 
+            success: false, 
+            message: "Terjadi kesalahan pada server." 
+        });
     }
 };
 

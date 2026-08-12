@@ -11,8 +11,6 @@ const ItemReport = {
     },
 
     // Riwayat laporan untuk satu barang, terbaru dulu.
-    // Catatan: belum dipaginasi — kalau nanti diekspos langsung lewat endpoint publik
-    // (bukan cuma dipakai internal), tambahkan LIMIT/OFFSET dengan pola yang sama seperti findAll di bawah.
     findByItemId: async (item_id, conn = db) => {
         const [rows] = await conn.query(
             `SELECT r.*, u.nama_lengkap AS pelapor
@@ -26,10 +24,42 @@ const ItemReport = {
     },
 
     // Semua laporan (dipakai admin untuk memantau laporan masuk & halaman Laporan Pengembalian)
-    // JOIN ke transactions untuk waktu_pinjam/waktu_kembali, dan ke items untuk kategori.
-    // Mendukung pagination (page, limit) ATAU mode all=true (untuk ekspor CSV tanpa LIMIT).
-    // Mengembalikan { rows, total }.
-    findAll: async ({ page = 1, limit = 10, all = false } = {}, conn = db) => {
+    findAll: async ({ page = 1, limit = 10, all = false, jenis_laporan, kategori, search, tanggal_mulai, tanggal_akhir, sortBy = 'terbaru' } = {}, conn = db) => {
+        const conditions = [];
+        const params = [];
+
+        if (jenis_laporan && jenis_laporan !== 'semua') {
+            conditions.push('r.jenis_laporan = ?');
+            params.push(jenis_laporan);
+        }
+        if (kategori && kategori.trim() !== '' && kategori !== 'semua') {
+            conditions.push('i.kategori = ?');
+            params.push(kategori.trim());
+        }
+        if (search && search.trim() !== '') {
+            conditions.push('(i.nama_barang LIKE ? OR u.nama_lengkap LIKE ?)');
+            const term = `%${search.trim()}%`;
+            params.push(term, term);
+        }
+        if (tanggal_mulai && tanggal_mulai.trim() !== '') {
+            conditions.push('DATE(r.created_at) >= ?');
+            params.push(tanggal_mulai.trim());
+        }
+        if (tanggal_akhir && tanggal_akhir.trim() !== '') {
+            conditions.push('DATE(r.created_at) <= ?');
+            params.push(tanggal_akhir.trim());
+        }
+
+        const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+        const ORDER_MAP = {
+            terbaru: 'r.created_at DESC, r.id DESC',
+            terlama: 'r.created_at ASC,  r.id ASC',
+            az:      'i.nama_barang ASC',
+            za:      'i.nama_barang DESC',
+        };
+        const orderBy = ORDER_MAP[sortBy] ?? ORDER_MAP.terbaru;
+
         const baseQuery = `
             SELECT
                 r.*,
@@ -40,23 +70,33 @@ const ItemReport = {
                 t.waktu_pinjam,
                 t.waktu_kembali
              FROM item_reports r
+             INNER JOIN items i ON r.item_id = i.id
              LEFT JOIN users u ON r.user_id = u.id
-             LEFT JOIN items i ON r.item_id = i.id
              LEFT JOIN transactions t ON r.transaction_id = t.id
-             ORDER BY r.created_at DESC, r.id DESC
+             ${whereClause}
+             ORDER BY ${orderBy}
         `;
-        const [countRows] = await conn.query('SELECT COUNT(*) AS total FROM item_reports');
+
+        const countQuery = `
+            SELECT COUNT(*) AS total
+            FROM item_reports r
+            INNER JOIN items i ON r.item_id = i.id
+            LEFT JOIN users u ON r.user_id = u.id
+            ${whereClause}
+        `;
+
+        const [countRows] = await conn.query(countQuery, params);
         const total = countRows[0].total;
 
         if (all) {
             // Tanpa LIMIT — dipakai hanya untuk ekspor CSV
-            const [rows] = await conn.query(baseQuery);
+            const [rows] = await conn.query(baseQuery, params);
             return { rows, total };
         }
 
         const safeLimit = Number(limit);
         const safeOffset = (Number(page) - 1) * safeLimit;
-        const [rows] = await conn.query(baseQuery + ' LIMIT ? OFFSET ?', [safeLimit, safeOffset]);
+        const [rows] = await conn.query(baseQuery + ' LIMIT ? OFFSET ?', [...params, safeLimit, safeOffset]);
 
         return { rows, total };
     },
@@ -64,9 +104,10 @@ const ItemReport = {
     // Jumlah laporan per jenis (baik/rusak/hilang) — dipakai untuk donut chart dashboard
     getBreakdownByJenis: async (conn = db) => {
         const [rows] = await conn.query(
-            `SELECT jenis_laporan, COUNT(*) AS jumlah
-             FROM item_reports
-             GROUP BY jenis_laporan`
+            `SELECT r.jenis_laporan, COUNT(*) AS jumlah
+             FROM item_reports r
+             INNER JOIN items i ON r.item_id = i.id
+             GROUP BY r.jenis_laporan`
         );
         return rows;
     },
@@ -74,7 +115,10 @@ const ItemReport = {
     // Jumlah laporan dalam N hari terakhir — dipakai untuk KPI card dashboard
     countRecent: async (days = 30, conn = db) => {
         const [rows] = await conn.query(
-            `SELECT COUNT(*) AS jumlah FROM item_reports WHERE created_at >= CURDATE() - INTERVAL ? DAY`,
+            `SELECT COUNT(*) AS jumlah 
+             FROM item_reports r
+             INNER JOIN items i ON r.item_id = i.id
+             WHERE r.created_at >= CURDATE() - INTERVAL ? DAY`,
             [Number(days)]
         );
         return rows[0].jumlah;

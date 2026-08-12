@@ -2,13 +2,38 @@ import Transaction from '../models/Transaction.js';
 import Item from '../models/Item.js';
 import { parsePagination, buildPaginationMeta } from '../utils/pagination.js';
 
-// GET /api/transactions?page=&limit=&status=&kategori= — admin only
-// Mengembalikan semua transaksi dengan server-side pagination + filter status/kategori.
+// GET /api/transactions/summary — ringkasan total, dipinjam, selesai (semua role)
+export const getSummary = async (req, res) => {
+    try {
+        const [totalRes, dipinjamRes, selesaiRes] = await Promise.all([
+            Transaction.findAll({ page: 1, limit: 1 }),
+            Transaction.findAll({ page: 1, limit: 1, status: 'dipinjam' }),
+            Transaction.findAll({ page: 1, limit: 1, status: 'selesai' }),
+        ]);
+        return res.status(200).json({
+            success: true,
+            data: {
+                total:    Number(totalRes.total)    || 0,
+                dipinjam: Number(dipinjamRes.total) || 0,
+                selesai:  Number(selesaiRes.total)  || 0,
+            },
+        });
+    } catch (error) {
+        console.error('getSummary error:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Gagal mengambil ringkasan transaksi.',
+        });
+    }
+};
+
+// GET /api/transactions?page=&limit=&status=&kategori=&search= — admin only
+// Mengembalikan semua transaksi dengan server-side pagination + filter status/kategori/search.
 export const getAllTransactions = async (req, res) => {
     try {
         const { page, limit } = parsePagination(req.query);
-        const { status, kategori } = req.query;
-        const { rows, total } = await Transaction.findAll({ page, limit, status, kategori });
+        const { status, kategori, search, sortBy } = req.query;
+        const { rows, total } = await Transaction.findAll({ page, limit, status, kategori, search, sortBy });
 
         return res.status(200).json({
             success: true,
@@ -31,7 +56,8 @@ export const getMyTransactions = async (req, res) => {
     try {
         const userId = req.user.id;
         const { page, limit } = parsePagination(req.query);
-        const { rows, total } = await Transaction.findByUserId(userId, { page, limit });
+        const { status, kategori, search, sortBy } = req.query;
+        const { rows, total } = await Transaction.findByUserId(userId, { page, limit, status, kategori, search, sortBy });
 
         return res.status(200).json({
             success: true,

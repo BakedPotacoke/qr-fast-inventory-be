@@ -15,13 +15,14 @@ const deleteFromCloudinary = async (publicId) => {
     }
 };
 
-// GET /api/items?status=&kategori=&page=&limit= — semua user terautentikasi bisa akses
+// GET /api/items?status=&kategori=&search=&page=&limit= — semua user terautentikasi bisa akses
 export const getAllItems = async (req, res) => {
     try {
-        const { status, kategori } = req.query;
+        // PERBAIKAN: Menambahkan 'search' untuk menangkap parameter dari frontend
+        const { status, kategori, search, sortBy } = req.query;
         const { page, limit } = parsePagination(req.query);
 
-        const { rows, total } = await Item.findAll({ status, kategori, page, limit });
+        const { rows, total } = await Item.findAll({ status, kategori, search, sortBy, page, limit });
 
         res.status(200).json({
             data: rows,
