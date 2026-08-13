@@ -9,12 +9,16 @@ import { parsePagination, buildPaginationMeta } from '../utils/pagination.js';
 //   breakdown       → [{ jenis_laporan, jumlah }]  untuk tab filter counts
 export const getSummary = async (req, res) => {
     try {
+        const { kategori, search, tanggal_mulai, tanggal_akhir } = req.query;
+
         const [{ total }, breakdown] = await Promise.all([
             ItemReport.findAll({ all: true }),
-            ItemReport.getBreakdownByJenis(),
+            ItemReport.getBreakdownByJenis({ kategori, search, tanggal_mulai, tanggal_akhir }),
         ]);
 
         const bulan_ini = await ItemReport.countRecent(30);
+
+        const total_filtered = breakdown.reduce((sum, b) => sum + Number(b.jumlah), 0);
 
         const perlu_perhatian = breakdown
             .filter((b) => b.jenis_laporan === 'rusak' || b.jenis_laporan === 'hilang')
@@ -24,6 +28,7 @@ export const getSummary = async (req, res) => {
             success: true,
             data: {
                 total:           Number(total) || 0,
+                total_filtered,
                 bulan_ini:       Number(bulan_ini) || 0,
                 perlu_perhatian,
                 breakdown,

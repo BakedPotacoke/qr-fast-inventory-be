@@ -5,17 +5,40 @@ import { parsePagination, buildPaginationMeta } from '../utils/pagination.js';
 // GET /api/transactions/summary — ringkasan total, dipinjam, selesai (semua role)
 export const getSummary = async (req, res) => {
     try {
-        const [totalRes, dipinjamRes, selesaiRes] = await Promise.all([
-            Transaction.findAll({ page: 1, limit: 1 }),
-            Transaction.findAll({ page: 1, limit: 1, status: 'dipinjam' }),
-            Transaction.findAll({ page: 1, limit: 1, status: 'selesai' }),
+        const { kategori, search, tanggal_mulai, tanggal_akhir } = req.query;
+        const isAdmin = req.user?.role === 'admin';
+        const userId = req.user?.id;
+
+        const queryFn = (opts) => {
+            if (!isAdmin && userId) {
+                return Transaction.findByUserId(userId, opts);
+            }
+            return Transaction.findAll(opts);
+        };
+
+        // Global (unfiltered) summary untuk stat cards
+        const [globalTotal, globalDipinjam, globalSelesai] = await Promise.all([
+            queryFn({ page: 1, limit: 1 }),
+            queryFn({ page: 1, limit: 1, status: 'dipinjam' }),
+            queryFn({ page: 1, limit: 1, status: 'selesai' }),
         ]);
+
+        // Filtered summary untuk tab filter counts
+        const [filteredTotal, filteredDipinjam, filteredSelesai] = await Promise.all([
+            queryFn({ page: 1, limit: 1, kategori, search, tanggal_mulai, tanggal_akhir }),
+            queryFn({ page: 1, limit: 1, status: 'dipinjam', kategori, search, tanggal_mulai, tanggal_akhir }),
+            queryFn({ page: 1, limit: 1, status: 'selesai', kategori, search, tanggal_mulai, tanggal_akhir }),
+        ]);
+
         return res.status(200).json({
             success: true,
             data: {
-                total:    Number(totalRes.total)    || 0,
-                dipinjam: Number(dipinjamRes.total) || 0,
-                selesai:  Number(selesaiRes.total)  || 0,
+                total:             Number(globalTotal.total)        || 0,
+                dipinjam:          Number(globalDipinjam.total)     || 0,
+                selesai:           Number(globalSelesai.total)      || 0,
+                filtered_total:    Number(filteredTotal.total)      || 0,
+                filtered_dipinjam: Number(filteredDipinjam.total)   || 0,
+                filtered_selesai:  Number(filteredSelesai.total)    || 0,
             },
         });
     } catch (error) {
@@ -32,8 +55,8 @@ export const getSummary = async (req, res) => {
 export const getAllTransactions = async (req, res) => {
     try {
         const { page, limit } = parsePagination(req.query);
-        const { status, kategori, search, sortBy } = req.query;
-        const { rows, total } = await Transaction.findAll({ page, limit, status, kategori, search, sortBy });
+        const { status, kategori, search, sortBy, tanggal_mulai, tanggal_akhir } = req.query;
+        const { rows, total } = await Transaction.findAll({ page, limit, status, kategori, search, sortBy, tanggal_mulai, tanggal_akhir });
 
         return res.status(200).json({
             success: true,

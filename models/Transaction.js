@@ -142,7 +142,7 @@ const Transaction = {
     // Mendukung pagination (page, limit), filter status & kategori, serta pencarian teks (search).
     // Parameter search mencari di nama_barang, qr_code, atau nama peminjam.
     // Mengembalikan { rows, total } — total dipakai controller untuk membangun metadata pagination.
-    findAll: async ({ page = 1, limit = 10, status, kategori, search, sortBy = 'terbaru' } = {}, conn = db) => {
+    findAll: async ({ page = 1, limit = 10, status, kategori, search, sortBy = 'terbaru', tanggal_mulai, tanggal_akhir } = {}, conn = db) => {
         const safeLimit = Number(limit);
         const safeOffset = (Number(page) - 1) * safeLimit;
 
@@ -161,6 +161,14 @@ const Transaction = {
             conditions.push('(i.nama_barang LIKE ? OR i.qr_code LIKE ? OR u.nama_lengkap LIKE ?)');
             const term = `%${search.trim()}%`;
             params.push(term, term, term);
+        }
+        if (tanggal_mulai && tanggal_mulai.trim() !== '') {
+            conditions.push('DATE(t.waktu_pinjam) >= ?');
+            params.push(tanggal_mulai.trim());
+        }
+        if (tanggal_akhir && tanggal_akhir.trim() !== '') {
+            conditions.push('DATE(t.waktu_pinjam) <= ?');
+            params.push(tanggal_akhir.trim());
         }
 
         const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';

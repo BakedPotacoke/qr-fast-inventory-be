@@ -101,13 +101,39 @@ const ItemReport = {
         return { rows, total };
     },
 
-    // Jumlah laporan per jenis (baik/rusak/hilang) — dipakai untuk donut chart dashboard
-    getBreakdownByJenis: async (conn = db) => {
+    // Jumlah laporan per jenis (baik/rusak/hilang) — dipakai untuk donut chart dashboard & tab filter counts
+    getBreakdownByJenis: async ({ kategori, search, tanggal_mulai, tanggal_akhir } = {}, conn = db) => {
+        const conditions = [];
+        const params = [];
+
+        if (kategori && kategori.trim() !== '' && kategori !== 'semua') {
+            conditions.push('i.kategori = ?');
+            params.push(kategori.trim());
+        }
+        if (search && search.trim() !== '') {
+            conditions.push('(i.nama_barang LIKE ? OR u.nama_lengkap LIKE ?)');
+            const term = `%${search.trim()}%`;
+            params.push(term, term);
+        }
+        if (tanggal_mulai && tanggal_mulai.trim() !== '') {
+            conditions.push('DATE(r.created_at) >= ?');
+            params.push(tanggal_mulai.trim());
+        }
+        if (tanggal_akhir && tanggal_akhir.trim() !== '') {
+            conditions.push('DATE(r.created_at) <= ?');
+            params.push(tanggal_akhir.trim());
+        }
+
+        const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
         const [rows] = await conn.query(
             `SELECT r.jenis_laporan, COUNT(*) AS jumlah
              FROM item_reports r
              INNER JOIN items i ON r.item_id = i.id
-             GROUP BY r.jenis_laporan`
+             LEFT JOIN users u ON r.user_id = u.id
+             ${whereClause}
+             GROUP BY r.jenis_laporan`,
+            params
         );
         return rows;
     },
