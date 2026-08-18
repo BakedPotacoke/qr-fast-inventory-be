@@ -243,6 +243,34 @@ const Transaction = {
         );
         return rows[0].jumlah;
     },
+
+    // Tren peminjaman berdasarkan date range eksplisit
+    getTrenPeminjamanByRange: async (dateFrom, dateTo, conn = db) => {
+        const [rows] = await conn.query(
+            `SELECT DATE(waktu_pinjam) AS tanggal, COUNT(*) AS jumlah
+             FROM transactions
+             WHERE DATE(waktu_pinjam) >= ? AND DATE(waktu_pinjam) <= ?
+             GROUP BY DATE(waktu_pinjam)
+             ORDER BY tanggal ASC`,
+            [dateFrom, dateTo]
+        );
+        return rows;
+    },
+
+    // Top barang berdasarkan date range eksplisit
+    getTopBarangByRange: async (limit = 5, dateFrom, dateTo, conn = db) => {
+        const [rows] = await conn.query(
+            `SELECT i.id, i.nama_barang, COUNT(*) AS dipinjam
+             FROM transactions t
+             JOIN items i ON i.id = t.item_id
+             WHERE DATE(t.waktu_pinjam) >= ? AND DATE(t.waktu_pinjam) <= ?
+             GROUP BY i.id, i.nama_barang
+             ORDER BY dipinjam DESC
+             LIMIT ?`,
+            [dateFrom, dateTo, Number(limit)]
+        );
+        return rows;
+    },
 };
 
 export default Transaction;
