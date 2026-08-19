@@ -94,9 +94,9 @@ const Transaction = {
             params.push(kategori);
         }
         if (search && search.trim() !== '') {
-            conditions.push('(i.nama_barang LIKE ? OR i.qr_code LIKE ?)');
+            conditions.push('(i.nama_barang LIKE ? OR i.qr_code LIKE ? OR CAST(t.id AS CHAR) LIKE ?)');
             const term = `%${search.trim()}%`;
-            params.push(term, term);
+            params.push(term, term, term);
         }
         if (tanggal_mulai && tanggal_mulai.trim() !== '') {
             conditions.push('DATE(t.waktu_pinjam) >= ?');
@@ -166,9 +166,9 @@ const Transaction = {
             params.push(kategori);
         }
         if (search && search.trim() !== '') {
-            conditions.push('(i.nama_barang LIKE ? OR i.qr_code LIKE ? OR u.nama_lengkap LIKE ?)');
+            conditions.push('(i.nama_barang LIKE ? OR i.qr_code LIKE ? OR u.nama_lengkap LIKE ? OR CAST(t.id AS CHAR) LIKE ?)');
             const term = `%${search.trim()}%`;
-            params.push(term, term, term);
+            params.push(term, term, term, term);
         }
         if (tanggal_mulai && tanggal_mulai.trim() !== '') {
             conditions.push('DATE(t.waktu_pinjam) >= ?');

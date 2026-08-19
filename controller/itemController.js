@@ -4,6 +4,7 @@ import Transaction from '../models/Transaction.js';
 import ItemReport from '../models/ItemReport.js';
 import cloudinary from '../config/cloudinary.js';
 import { parsePagination, buildPaginationMeta } from '../utils/pagination.js';
+import { toSentenceCase } from '../utils/string.js';
 
 // ─── Helper: hapus gambar dari Cloudinary ───────────────────────────────────
 const deleteFromCloudinary = async (publicId) => {
@@ -54,6 +55,8 @@ export const createItem = async (req, res) => {
             return res.status(400).json({ message: 'Nama barang, QR/SKU, dan kategori wajib diisi.' });
         }
 
+        const cleanKategori = toSentenceCase(kategori);
+
         const existingItem = await Item.findByQrCode(qr_code);
         if (existingItem) {
             return res.status(400).json({ message: 'SKU sudah digunakan' });
@@ -62,11 +65,11 @@ export const createItem = async (req, res) => {
         const gambar_url           = req.cloudinaryResult?.secure_url || null;
         const cloudinary_public_id = req.cloudinaryResult?.public_id  || null;
 
-        const insertId = await Item.create({ nama_barang, qr_code, kategori, gambar_url, cloudinary_public_id });
+        const insertId = await Item.create({ nama_barang, qr_code, kategori: cleanKategori, gambar_url, cloudinary_public_id });
 
         res.status(201).json({
             message: 'Barang berhasil ditambahkan.',
-            data: { id: insertId, nama_barang, qr_code, kategori, gambar_url, status: 'tersedia' },
+            data: { id: insertId, nama_barang, qr_code, kategori: cleanKategori, gambar_url, status: 'tersedia' },
         });
     } catch (error) {
         console.error('createItem error:', error);
@@ -134,7 +137,7 @@ export const updateItem = async (req, res) => {
 
         if (userRole === 'admin') {
             if (nama_barang) updateData.nama_barang = nama_barang;
-            if (kategori) updateData.kategori = kategori;
+            if (kategori) updateData.kategori = toSentenceCase(kategori);
 
             if (qr_code) {
                 const existingItem = await Item.findByQrCode(qr_code);
@@ -226,7 +229,7 @@ export const importItems = async (req, res) => {
 
             const nama_barang = row.nama_barang?.toString().trim();
             const qr_code     = row.qr_code?.toString().trim();
-            const kategori    = row.kategori?.toString().trim();
+            const kategori    = toSentenceCase(row.kategori?.toString());
             const status      = row.status?.toString().trim().toLowerCase() || 'tersedia';
 
             if (!nama_barang) { results.errors.push({ row: rowNum, qr_code: qr_code || '-', message: 'nama_barang wajib diisi.' }); continue; }
