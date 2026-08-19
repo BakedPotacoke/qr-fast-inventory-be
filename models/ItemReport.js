@@ -42,11 +42,11 @@ const ItemReport = {
             params.push(term, term);
         }
         if (tanggal_mulai && tanggal_mulai.trim() !== '') {
-            conditions.push('DATE(r.created_at) >= ?');
+            conditions.push('DATE(t.waktu_pinjam) >= ?');
             params.push(tanggal_mulai.trim());
         }
         if (tanggal_akhir && tanggal_akhir.trim() !== '') {
-            conditions.push('DATE(r.created_at) <= ?');
+            conditions.push('DATE(t.waktu_pinjam) <= ?');
             params.push(tanggal_akhir.trim());
         }
 
@@ -82,6 +82,7 @@ const ItemReport = {
             FROM item_reports r
             INNER JOIN items i ON r.item_id = i.id
             LEFT JOIN users u ON r.user_id = u.id
+            LEFT JOIN transactions t ON r.transaction_id = t.id
             ${whereClause}
         `;
 
@@ -116,11 +117,11 @@ const ItemReport = {
             params.push(term, term);
         }
         if (tanggal_mulai && tanggal_mulai.trim() !== '') {
-            conditions.push('DATE(r.created_at) >= ?');
+            conditions.push('DATE(t.waktu_pinjam) >= ?');
             params.push(tanggal_mulai.trim());
         }
         if (tanggal_akhir && tanggal_akhir.trim() !== '') {
-            conditions.push('DATE(r.created_at) <= ?');
+            conditions.push('DATE(t.waktu_pinjam) <= ?');
             params.push(tanggal_akhir.trim());
         }
 
@@ -131,6 +132,7 @@ const ItemReport = {
              FROM item_reports r
              INNER JOIN items i ON r.item_id = i.id
              LEFT JOIN users u ON r.user_id = u.id
+             LEFT JOIN transactions t ON r.transaction_id = t.id
              ${whereClause}
              GROUP BY r.jenis_laporan`,
             params

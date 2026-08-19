@@ -4,7 +4,7 @@
 // query param & response shape-nya konsisten di semua endpoint.
 
 const DEFAULT_LIMIT = 15;
-const MAX_LIMIT = 100; // batas atas, cegah client minta limit=999999
+const MAX_LIMIT = 150; // batas atas, cegah client minta limit melebihi 150 data
 
 /**
  * Ambil & validasi { page, limit } dari req.query.

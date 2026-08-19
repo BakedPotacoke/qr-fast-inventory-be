@@ -202,6 +202,109 @@ export const updateItem = async (req, res) => {
     }
 };
 
+// POST /api/items/import — import massal CSV/XLSX (hanya admin)
+// Body: { items: [{ nama_barang, qr_code, kategori, status? }] }
+export const importItems = async (req, res) => {
+    try {
+        const { items } = req.body;
+
+        if (!Array.isArray(items) || items.length === 0) {
+            return res.status(400).json({ message: 'Data items wajib berupa array dan tidak boleh kosong.' });
+        }
+        if (items.length > 500) {
+            return res.status(400).json({ message: 'Maksimal 500 barang per sekali import.' });
+        }
+
+        const VALID_STATUSES = ['tersedia', 'dipinjam', 'rusak', 'hilang'];
+        const results = { inserted: 0, skipped: [], errors: [] };
+
+        // Validasi tiap row
+        const validRows = [];
+        for (let i = 0; i < items.length; i++) {
+            const row    = items[i];
+            const rowNum = i + 1;
+
+            const nama_barang = row.nama_barang?.toString().trim();
+            const qr_code     = row.qr_code?.toString().trim();
+            const kategori    = row.kategori?.toString().trim();
+            const status      = row.status?.toString().trim().toLowerCase() || 'tersedia';
+
+            if (!nama_barang) { results.errors.push({ row: rowNum, qr_code: qr_code || '-', message: 'nama_barang wajib diisi.' }); continue; }
+            if (!qr_code)     { results.errors.push({ row: rowNum, qr_code: '-', message: 'qr_code / SKU wajib diisi.' }); continue; }
+            if (!kategori)    { results.errors.push({ row: rowNum, qr_code, message: 'kategori wajib diisi.' }); continue; }
+            if (!VALID_STATUSES.includes(status)) {
+                results.errors.push({ row: rowNum, qr_code, message: `Status tidak valid: "${status}". Gunakan: ${VALID_STATUSES.join(', ')}.` });
+                continue;
+            }
+
+            validRows.push({ nama_barang, qr_code, kategori, status });
+        }
+
+        if (validRows.length === 0) {
+            return res.status(400).json({ message: 'Tidak ada data valid yang bisa diimport.', results });
+        }
+
+        // Dedup SKU dalam batch sendiri
+        const seenQr    = new Set();
+        const dedupedRows = [];
+        for (const row of validRows) {
+            if (seenQr.has(row.qr_code)) {
+                results.skipped.push({ qr_code: row.qr_code, message: 'Duplikat SKU dalam file import.' });
+            } else {
+                seenQr.add(row.qr_code);
+                dedupedRows.push(row);
+            }
+        }
+
+        // Cek SKU yang sudah ada di DB — satu kueri batch
+        const qrCodes      = dedupedRows.map(r => r.qr_code);
+        const placeholders = qrCodes.map(() => '?').join(',');
+        const [existingRows] = await db.query(
+            `SELECT qr_code FROM items WHERE qr_code IN (${placeholders})`, qrCodes
+        );
+        const existingSet = new Set(existingRows.map(r => r.qr_code));
+
+        const toInsert = [];
+        for (const row of dedupedRows) {
+            if (existingSet.has(row.qr_code)) {
+                results.skipped.push({ qr_code: row.qr_code, message: 'SKU sudah terdaftar di sistem.' });
+            } else {
+                toInsert.push(row);
+            }
+        }
+
+        if (toInsert.length === 0) {
+            return res.status(200).json({
+                message: 'Semua SKU sudah terdaftar. Tidak ada barang baru yang diimport.',
+                results,
+            });
+        }
+
+        // Bulk INSERT — gambar_url & cloudinary_public_id dikosongkan
+        const insertPlaceholders = toInsert.map(() => '(?, ?, ?, ?, ?, ?)').join(', ');
+        const insertValues       = toInsert.flatMap(r => [r.nama_barang, r.qr_code, r.kategori, null, null, r.status]);
+
+        const [insertResult] = await db.query(
+            `INSERT INTO items (nama_barang, qr_code, kategori, gambar_url, cloudinary_public_id, status) VALUES ${insertPlaceholders}`,
+            insertValues
+        );
+
+        results.inserted = insertResult.affectedRows;
+
+        return res.status(200).json({
+            message: `Import selesai. ${results.inserted} barang berhasil ditambahkan, ${results.skipped.length} dilewati.`,
+            results,
+        });
+
+    } catch (error) {
+        console.error('importItems error:', error);
+        if (error.code === 'ER_DUP_ENTRY' || error.errno === 1062) {
+            return res.status(400).json({ message: 'Terjadi duplikat SKU. Coba lagi.' });
+        }
+        res.status(500).json({ message: 'Terjadi kesalahan pada server saat import.' });
+    }
+};
+
 // POST /api/items/:id/report — lapor barang hilang/rusak
 export const reportItem = async (req, res) => {
     const itemId = req.params.id;

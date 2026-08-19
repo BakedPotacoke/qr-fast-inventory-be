@@ -78,7 +78,7 @@ const Transaction = {
     },
     // Sekarang mendukung pagination (page, limit) serta filter status, kategori, dan search.
     // Mengembalikan { rows, total } — total dipakai controller untuk membangun metadata pagination.
-    findByUserId: async (userId, { page = 1, limit = 10, status, kategori, search, sortBy = 'terbaru' } = {}, conn = db) => {
+    findByUserId: async (userId, { page = 1, limit = 10, status, kategori, search, sortBy = 'terbaru', tanggal_mulai, tanggal_akhir } = {}, conn = db) => {
         const safeLimit = Number(limit);
         const safeOffset = (Number(page) - 1) * safeLimit;
 
@@ -97,6 +97,14 @@ const Transaction = {
             conditions.push('(i.nama_barang LIKE ? OR i.qr_code LIKE ?)');
             const term = `%${search.trim()}%`;
             params.push(term, term);
+        }
+        if (tanggal_mulai && tanggal_mulai.trim() !== '') {
+            conditions.push('DATE(t.waktu_pinjam) >= ?');
+            params.push(tanggal_mulai.trim());
+        }
+        if (tanggal_akhir && tanggal_akhir.trim() !== '') {
+            conditions.push('DATE(t.waktu_pinjam) <= ?');
+            params.push(tanggal_akhir.trim());
         }
 
         const whereClause = `WHERE ${conditions.join(' AND ')}`;

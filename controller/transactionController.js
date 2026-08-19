@@ -79,8 +79,8 @@ export const getMyTransactions = async (req, res) => {
     try {
         const userId = req.user.id;
         const { page, limit } = parsePagination(req.query);
-        const { status, kategori, search, sortBy } = req.query;
-        const { rows, total } = await Transaction.findByUserId(userId, { page, limit, status, kategori, search, sortBy });
+        const { status, kategori, search, sortBy, tanggal_mulai, tanggal_akhir } = req.query;
+        const { rows, total } = await Transaction.findByUserId(userId, { page, limit, status, kategori, search, sortBy, tanggal_mulai, tanggal_akhir });
 
         return res.status(200).json({
             success: true,
